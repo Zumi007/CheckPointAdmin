@@ -1,0 +1,56 @@
+﻿@page "/"
+@using CheckPointAdmin.Models
+@inject Supabase.Client SupabaseClient
+
+<PageTitle>Kezdőlap</PageTitle>
+
+<h1>Supabase Kapcsolat Teszt</h1>
+
+@if (errorMessage != null)
+{
+    <div class="alert alert-danger">
+        <strong>Hiba történt a csatlakozáskor:</strong> <br />
+        @errorMessage
+    </div>
+}
+else if (csoportok == null)
+{
+    <p><em>Kapcsolódás a Supabase-hez és adatok betöltése...</em></p>
+}
+else
+{
+    <div class="alert alert-success">
+        <strong>Sikeres kapcsolat! 🎉</strong> <br />
+        Elértük a Supabase adatbázist. A "Csoportok" táblában jelenleg @csoportok.Count db rekord található.
+    </div>
+
+    @if (csoportok.Any())
+    {
+        <ul>
+            @foreach (var cs in csoportok)
+            {
+                <li>@cs.CsoportNev (ID: @cs.CsoportId)</li>
+            }
+        </ul>
+    }
+}
+
+@code {
+    private List<Csoport>? csoportok;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Teszt lekérdezés a Csoportok táblából
+            var response = await SupabaseClient.From<Csoport>().Get();
+            csoportok = response.Models;
+        }
+        catch (Exception ex)
+        {
+            // Ha rossz a kulcs, az URL, vagy nem létezik a tábla, itt elkapjuk a hibát
+            errorMessage = ex.Message;
+        }
+    }
+}
