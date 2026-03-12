@@ -1,6 +1,5 @@
 ﻿<ul class="navbar-nav me-auto mb-2 mb-lg-0">
     <li class="nav-item">
-        <!-- A Match="NavLinkMatch.All" azért kell, hogy csak pontosan a "/" útvonalnál legyen aktív -->
         <NavLink class="nav-link px-3" href="" Match="NavLinkMatch.All">
             <i class="bi bi-house-door me-2"></i>Kezdőlap
         </NavLink>
@@ -16,13 +15,42 @@
         </NavLink>
     </li>
     <li class="nav-item">
-        <NavLink class="nav-link px-3 text-secondary" href="tesztek">
-            <i class="bi bi-file-earmark-text me-2"></i>Tesztek (Hamarosan)
+        <NavLink class="nav-link px-3" href="tesztek">
+            <i class="bi bi-file-earmark-text me-2"></i>Tesztek
+        </NavLink>
+    </li>
+    <li class="nav-item">
+        <NavLink class="nav-link px-3" href="kiosztasok">
+            <i class="bi bi-file-earmark-text me-2"></i>Kiosztások
         </NavLink>
     </li>
 </ul>
-<h3>NavMenu</h3>
 
-@code {
+<style>
+    /* Alap menüpont stílus - fehérebb és határozottabb */
+    .nav-link {
+        color: rgba(255, 255, 255, 0.8) !important;
+        font-weight: 500;
+        transition: all 0.2s ease-in-out;
+        border-bottom: 2px solid transparent;
+    }
 
-}
+        /* Hover állapot - tiszta fehér */
+        .nav-link:hover {
+            color: #ffffff !important;
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Aktív menüpont - Kékebb (primary) és intenzívebb */
+        .nav-link.active {
+            color: #0d6efd !important; /* Bootstrap Primary kék */
+            font-weight: 700;
+            text-shadow: 0 0 10px rgba(13, 110, 253, 0.3);
+            border-bottom: 2px solid #0d6efd;
+        }
+
+            /* Ikonok színe az aktív állapotban */
+            .nav-link.active i {
+                color: #0d6efd !important;
+            }
+</style>

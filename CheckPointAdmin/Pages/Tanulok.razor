@@ -1,0 +1,356 @@
+﻿@page "/tanulok"
+@using CheckPointAdmin.Models
+@inject Supabase.Client Db
+
+<PageTitle>Tanulók Kezelése</PageTitle>
+
+<div class="row mb-4 align-items-center">
+    <div class="col">
+        <h1><i class="bi bi-person-badge text-primary me-2"></i>Tanulók Kezelése</h1>
+        <p class="text-muted">Itt kezelheted a diákok adatait, email címeit és oszthatod be őket osztályokba.</p>
+    </div>
+</div>
+
+<!-- ÚJ TANULÓ HOZZÁADÁSA (Kártya elrendezésben) -->
+<div class="card bg-dark border-secondary mb-4 shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title text-light mb-3">Új tanuló rögzítése</h5>
+        <div class="row g-2">
+            <div class="col-md-3">
+                <input type="text" class="form-control" placeholder="Név" @bind="ujNev" />
+            </div>
+            <div class="col-md-3">
+                <input type="email" class="form-control" placeholder="Email cím" @bind="ujEmail" />
+            </div>
+            <div class="col-md-2">
+                <input type="text" class="form-control" placeholder="Felhasználónév" @bind="ujLogin" />
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" @bind="ujCsoportId">
+                    <option value="">Csoport választása...</option>
+                    @if (csoportok != null)
+                    {
+                        @foreach (var cs in csoportok.Where(c => c.Aktiv))
+                        {
+                            <option value="@cs.CsoportId">@cs.CsoportNev</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-success w-100" @onclick="Hozzaadas" disabled="@string.IsNullOrWhiteSpace(ujNev)">
+                    <i class="bi bi-person-plus-fill me-1"></i> Felvétel
+                </button>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(hibaUzenet))
+        {
+            <div class="alert alert-danger mt-3 mb-0">@hibaUzenet</div>
+        }
+    </div>
+</div>
+
+<!-- SZŰRÉS ÉS LISTÁZÁS -->
+@if (tanulok == null || csoportok == null)
+{
+    <div class="d-flex justify-content-center my-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Betöltés...</span>
+        </div>
+    </div>
+}
+else
+{
+    <!-- SZŰRŐ PANEL -->
+    <div class="row mb-3">
+        <div class="col-md-4">
+            <div class="input-group">
+                <span class="input-group-text bg-secondary text-light border-secondary"><i class="bi bi-funnel"></i></span>
+                <select class="form-select bg-dark text-light border-secondary" @bind="szuroCsoportId">
+                    <option value="">Minden csoport (Összes tanuló)</option>
+                    @foreach (var cs in csoportok)
+                    {
+                        <option value="@cs.CsoportId">@cs.CsoportNev</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </div>
+
+    @if (!SzurtTanulok.Any())
+    {
+        <div class="alert alert-info bg-transparent border-info text-info">
+            <i class="bi bi-info-circle me-2"></i> Nem található tanuló a megadott feltételekkel.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive shadow-sm rounded">
+            <table class="table table-dark table-striped table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th style="width: 70px;">ID</th>
+                        <th>Név</th>
+                        <th>Elérhetőség</th>
+                        <th>Login</th>
+                        <th>Jelszó</th>
+                        <th>Csoport</th>
+                        <th style="width: 100px;">Állapot</th>
+                        <th style="width: 220px;" class="text-end">Műveletek</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in SzurtTanulok)
+                    {
+                        <tr class="align-middle">
+                            <td><small class="text-muted">#@t.TanuloId</small></td>
+
+                            <!-- NÉV SZERKESZTÉSE -->
+                            <td>
+
+                                @if (szerkesztettId == t.TanuloId)
+                                {
+                                    <input type="text" class="form-control form-control-sm" @bind="szerkesztettNev" />
+                                }
+                                else
+                                {
+                                    <span class="@(t.Aktiv ? "text-light" : "text-muted text-decoration-line-through") fw-bold">
+                                        @t.Nev
+                                    </span>
+                                }
+
+                            </td>
+
+                            <!-- EMAIL SZERKESZTÉSE -->
+                            <td>
+                                @if (szerkesztettId == t.TanuloId)
+                                {
+                                    <input type="email" class="form-control form-control-sm" @bind="szerkesztettEmail" />
+                                }
+                                else
+                                {
+                                    <span class="small @(t.Aktiv ? "text-info" : "text-muted")">@t.Email</span>
+                                }
+                            </td>
+
+                            <!-- LOGIN SZERKESZTÉSE -->
+                            <td>
+                                @if (szerkesztettId == t.TanuloId)
+                                {
+                                    <input type="text" class="form-control form-control-sm" @bind="szerkesztettLogin" />
+                                }
+                                else
+                                {
+                                    <code class="text-secondary">@t.Login</code>
+                                }
+                            </td>
+
+                            <!-- JELSZO SZERKESZTÉSE-->
+                            <td>
+                                @{
+                                    // Megnézzük, hogy az adott ID "felfedett" állapotban van-e
+                                    bool felfedve = felfedettJelszavak.Contains(t.TanuloId);
+                                }
+                                <div class="d-flex align-items-center text-nowrap" style="min-width: 150px;">
+                                    @if (szerkesztettId == t.TanuloId)
+                                    {
+                                        <input type="text" class="form-control form-control-sm" @bind="szerkesztettJelszo" />
+                                    }
+                                    else
+                                    {
+                                        <code> @(felfedve? t.Jelszo: "*****")</code>
+                                        <button class="btn btn-sm text-secondary p-0 ms-2" @onclick="() => JelszoValto(t.TanuloId)">
+                                            <i class="bi @(felfedve ? "bi-eye-slash" : "bi-eye")"></i>
+                                        </button>
+                                    }
+                                </div>
+
+                            </td>
+
+                            <!-- CSOPORT SZERKESZTÉSE -->
+                            <td>
+                                @if (szerkesztettId == t.TanuloId)
+                                {
+                                    <select class="form-select form-select-sm" @bind="szerkesztettCsoportId">
+                                        <option value="">-- Nincs csoport --</option>
+                                        @foreach (var cs in csoportok)
+                                        {
+                                            <option value="@cs.CsoportId">@cs.CsoportNev</option>
+                                        }
+                                    </select>
+                                }
+                                else
+                                {
+                                    var csNev = csoportok.FirstOrDefault(c => c.CsoportId == t.CsoportId)?.CsoportNev ?? "Nincs beosztva";
+                                    <span class="badge rounded-pill bg-outline-info border border-info text-info">@csNev</span>
+                                }
+                            </td>
+
+                            <!-- STÁTUSZ -->
+                            <td>
+                                @if (t.Aktiv)
+                                {
+                                    <span class="badge bg-success">Aktív</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">Inaktív</span>
+                                }
+                            </td>
+
+                            <!-- GOMBOK -->
+                            <td class="text-end">
+                                @if (szerkesztettId == t.TanuloId)
+                                {
+                                    <button class="btn btn-sm btn-success me-1" @onclick="() => Mentes(t)">
+                                        <i class="bi bi-check-lg"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-light" @onclick="Megse">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => Szerkesztes(t)" title="Szerkesztés">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+
+                                    <button class="btn btn-sm @(t.Aktiv ? "btn-outline-warning" : "btn-outline-info")" @onclick="() => AllapotValtas(t)" title="@(t.Aktiv ? "Deaktiválás" : "Aktiválás")">
+                                        <i class="bi @(t.Aktiv ? "bi-person-x" : "bi-person-check")"></i>
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    private List<Tanulo>? tanulok;
+    private List<Csoport>? csoportok;
+    private HashSet<long>? felfedettJelszavak = new HashSet<long>();
+    private string hibaUzenet = "";
+
+    // Új tanuló mezői
+    private string ujNev = "";
+    private string ujEmail = "";
+    private string ujLogin = "";
+    private long? ujCsoportId = null;
+
+    // Szűrés
+    private long? szuroCsoportId = null;
+
+    // LINQ alapú szűrt lista, ami automatikusan frissül, ha szuroCsoportId változik
+    private IEnumerable<Tanulo> SzurtTanulok => (szuroCsoportId == null)
+        ? (tanulok ?? new List<Tanulo>())
+        : (tanulok?.Where(t => t.CsoportId == szuroCsoportId) ?? new List<Tanulo>());
+
+    // Szerkesztés segédváltozói
+    private long? szerkesztettId = null;
+    private string szerkesztettNev = "";
+    private string szerkesztettEmail = "";
+    private string szerkesztettLogin = "";
+    private long? szerkesztettCsoportId = null;
+    private string szerkesztettJelszo = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Betoltes();
+    }
+
+    private void JelszoValto(long id)
+    {
+        if (felfedettJelszavak.Contains(id))
+            felfedettJelszavak.Remove(id);
+        else
+            felfedettJelszavak.Add(id);
+    }
+
+    private async Task Betoltes()
+    {
+        try
+        {
+            hibaUzenet = "";
+
+            // Csoportok betöltése a legördülőkhöz
+            var csResp = await Db.From<Csoport>().Where(x => x.Aktiv == true).Order("CsoportNev", Supabase.Postgrest.Constants.Ordering.Ascending).Get();
+            csoportok = csResp.Models;
+
+            // Tanulók betöltése
+            var tResp = await Db.From<Tanulo>().Order("Tanulo_id", Supabase.Postgrest.Constants.Ordering.Ascending).Get();
+            tanulok = tResp.Models;
+        }
+        catch (Exception ex)
+        {
+            hibaUzenet = "Hiba a betöltéskor: " + ex.Message;
+        }
+    }
+
+    private async Task Hozzaadas()
+    {
+        if (string.IsNullOrWhiteSpace(ujNev)) return;
+
+        try
+        {
+            var uj = new Tanulo { Nev = ujNev, Email = ujEmail, Login = ujLogin, CsoportId = ujCsoportId, Aktiv = true };
+            await Db.From<Tanulo>().Insert(uj);
+
+            ujNev = ""; ujEmail = ""; ujLogin = ""; ujCsoportId = null;
+            await Betoltes();
+        }
+        catch (Exception ex)
+        {
+            hibaUzenet = "Sikertelen mentés: " + ex.Message;
+        }
+    }
+
+    private void Szerkesztes(Tanulo t)
+    {
+        szerkesztettId = t.TanuloId;
+        szerkesztettNev = t.Nev ?? "";
+        szerkesztettEmail = t.Email ?? "";
+        szerkesztettLogin = t.Login ?? "";
+        szerkesztettCsoportId = t.CsoportId;
+        szerkesztettJelszo = t.Jelszo;
+    }
+
+    private void Megse() => szerkesztettId = null;
+
+    private async Task Mentes(Tanulo t)
+    {
+        try
+        {
+            t.Nev = szerkesztettNev;
+            t.Email = szerkesztettEmail;
+            t.Login = szerkesztettLogin;
+            t.CsoportId = szerkesztettCsoportId;
+            t.Jelszo = szerkesztettJelszo;
+
+            await Db.From<Tanulo>().Update(t);
+            szerkesztettId = null;
+            await Betoltes();
+        }
+        catch (Exception ex)
+        {
+            hibaUzenet = "Sikertelen frissítés: " + ex.Message;
+        }
+    }
+
+    private async Task AllapotValtas(Tanulo t)
+    {
+        try
+        {
+            t.Aktiv = !t.Aktiv;
+            await Db.From<Tanulo>().Update(t);
+            await Betoltes();
+        }
+        catch (Exception ex)
+        {
+            hibaUzenet = "Hiba az állapotváltáskor: " + ex.Message;
+        }
+    }
+}

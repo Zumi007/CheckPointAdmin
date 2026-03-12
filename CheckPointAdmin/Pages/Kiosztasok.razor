@@ -1,0 +1,176 @@
+﻿@page "/kiosztasok"
+@using CheckPointAdmin.Models
+@inject Supabase.Client Db
+
+<PageTitle>Tesztek Kiosztása</PageTitle>
+
+<div class="row mb-4">
+    <div class="col">
+        <h1><i class="bi bi-send-check text-primary me-2"></i>Tesztek Kiosztása</h1>
+        <p class="text-muted">Itt rendelheted hozzá a létrehozott teszteket a különböző tanulócsoportokhoz.</p>
+    </div>
+</div>
+
+<!-- ÚJ KIOSZTÁS LÉTREHOZÁSA -->
+<div class="card bg-dark border-secondary mb-4 shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title text-light mb-3">Új kiosztás</h5>
+        <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small text-muted">Válassz tesztet</label>
+                <select class="form-select" @bind="ujTesztId">
+                    <option value="0">-- Teszt kiválasztása --</option>
+                    @if (tesztek != null)
+                    {
+                        @foreach (var t in tesztek.Where(x => x.Aktiv))
+                        {
+                            <option value="@t.TesztId">@t.TesztCime</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted">Célcsoport</label>
+                <select class="form-select" @bind="ujCsoportId">
+                    <option value="0">-- Csoport kiválasztása --</option>
+                    @if (csoportok != null)
+                    {
+                        @foreach (var cs in csoportok.Where(x => x.Aktiv))
+                        {
+                            <option value="@cs.CsoportId">@cs.CsoportNev</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted">Határidő (opcionális)</label>
+                <input type="datetime-local" class="form-control" @bind="ujHatarido" />
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary w-100" @onclick="KiosztasMentese" disabled="@(ujTesztId == 0 || ujCsoportId == 0)">
+                    <i class="bi bi-plus-lg me-1"></i> Kiosztás
+                </button>
+            </div>
+        </div>
+        @if (!string.IsNullOrEmpty(hibaUzenet))
+        {
+            <div class="alert alert-danger mt-3 mb-0">@hibaUzenet</div>
+        }
+    </div>
+</div>
+
+@if (kiosztasok == null)
+{
+    <div class="text-center my-5"><div class="spinner-border text-primary"></div></div>
+}
+else if (!kiosztasok.Any())
+{
+    <div class="alert alert-info bg-transparent border-info text-info text-center">
+        Még nincs egyetlen aktív kiosztás sem.
+    </div>
+}
+else
+{
+    <div class="table-responsive rounded shadow-sm">
+        <table class="table table-dark table-striped table-hover mb-0 border-secondary">
+            <thead>
+                <tr>
+                    <th>Teszt</th>
+                    <th>Csoport</th>
+                    <th>Kiosztva</th>
+                    <th>Határidő</th>
+                    <th style="width: 150px;" class="text-end">Műveletek</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var k in kiosztasok)
+                {
+                    var teszt = tesztek?.FirstOrDefault(x => x.TesztId == k.TesztId);
+                    var csoport = csoportok?.FirstOrDefault(x => x.CsoportId == k.CsoportId);
+
+                    <tr class="align-middle">
+                        <td><span class="fw-bold text-info">@(teszt?.TesztCime ?? "Ismeretlen teszt")</span></td>
+                        <td><span class="badge bg-secondary">@(csoport?.CsoportNev ?? "Ismeretlen csoport")</span></td>
+                        <td><small class="text-muted">@k.Letrehozva.ToString("yyyy.MM.dd. HH:mm")</small></td>
+                        <td>
+                            @if (k.Hatarido.HasValue)
+                            {
+                                <span class="@(k.Hatarido < DateTime.Now ? "text-danger" : "text-light") small">
+                                    @k.Hatarido.Value.ToString("yyyy.MM.dd. HH:mm")
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">Nincs határidő</span>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => KiosztasTorlese(k.KiosztasId)">
+                                <i class="bi bi-trash"></i> Visszavonás
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<Kiosztas>? kiosztasok;
+    private List<Teszt>? tesztek;
+    private List<Csoport>? csoportok;
+
+    private long ujTesztId = 0;
+    private long ujCsoportId = 0;
+    private DateTime? ujHatarido;
+    private string hibaUzenet = "";
+
+    protected override async Task OnInitializedAsync() => await Betoltes();
+
+    private async Task Betoltes()
+    {
+        try
+        {
+            var tTask = Db.From<Teszt>().Get();
+            var cTask = Db.From<Csoport>().Get();
+            var kTask = Db.From<Kiosztas>().Order("Letrehozva", Supabase.Postgrest.Constants.Ordering.Descending).Get();
+
+            await Task.WhenAll(tTask, cTask, kTask);
+
+            tesztek = tTask.Result.Models;
+            csoportok = cTask.Result.Models;
+            kiosztasok = kTask.Result.Models;
+        }
+        catch (Exception ex) { hibaUzenet = "Hiba: " + ex.Message; }
+    }
+
+    private async Task KiosztasMentese()
+    {
+        try
+        {
+            var uj = new Kiosztas
+            {
+                TesztId = ujTesztId,
+                CsoportId = ujCsoportId,
+                Hatarido = ujHatarido,
+                Aktiv = true
+            };
+
+            await Db.From<Kiosztas>().Insert(uj);
+            ujTesztId = 0; ujCsoportId = 0; ujHatarido = null;
+            await Betoltes();
+        }
+        catch (Exception ex) { hibaUzenet = "Sikertelen mentés: " + ex.Message; }
+    }
+
+    private async Task KiosztasTorlese(long id)
+    {
+        try
+        {
+            await Db.From<Kiosztas>().Where(x => x.KiosztasId == id).Delete();
+            await Betoltes();
+        }
+        catch (Exception ex) { hibaUzenet = "Hiba a törléskor: " + ex.Message; }
+    }
+}

@@ -21,6 +21,9 @@ namespace CheckPointAdmin.Models
         [Column("Login")]
         public string? Login { get; set; }
 
+        [Column("Jelszo")]
+        public string? Jelszo { get; set; }
+
         [Column("Aktiv")]
         public bool Aktiv { get; set; } = true;
     }
