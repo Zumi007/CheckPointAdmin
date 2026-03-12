@@ -1,3 +1,45 @@
 ﻿@inherits LayoutComponentBase
 
-@Body
+<div class="d-flex flex-column min-vh-100">
+    <!-- Felső Navigációs Sáv (Navbar) -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark border-bottom shadow-sm">
+        <div class="container-fluid">
+            <!-- Logó / Alkalmazás neve -->
+            <a class="navbar-brand d-flex align-items-center" href="">
+                <i class="bi bi-shield-check text-primary fs-3 me-2"></i>
+                <span class="fw-bold">CheckPointAdmin</span>
+            </a>
+            
+            <!-- Mobilos "Hamburger" gomb -->
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarTartalom" aria-controls="navbarTartalom" aria-expanded="false" aria-label="Menü kinyitása">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <!-- A menüpontok (NavMenu komponens behúzása) -->
+            <div class="collapse navbar-collapse" id="navbarTartalom">
+                <NavMenu />
+            </div>
+            
+            <!-- Jobb oldali rész (később ide jöhet a profil/kijelentkezés) -->
+            <div class="d-none d-lg-flex text-secondary">
+                <i class="bi bi-person-circle fs-4"></i>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Fő tartalom (Ide töltődnek be az oldalak, pl. a Csoportok.razor) -->
+    <main class="flex-grow-1 p-4">
+        <div class="container-fluid">
+            @Body
+        </div>
+    </main>
+    
+    <!-- Lábléc -->
+    <footer class="footer mt-auto py-3 bg-body-tertiary border-top text-center">
+        <div class="container">
+            <span class="text-muted small">
+                <i class="bi bi-c-circle"></i> 2026 CheckPoint - Teszt és Számonkérő Rendszer
+            </span>
+        </div>
+    </footer>
+</div>

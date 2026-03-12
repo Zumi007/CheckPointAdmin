@@ -1,0 +1,261 @@
+﻿@page "/csoportok"
+@using CheckPointAdmin.Models
+@inject Supabase.Client Db
+
+<PageTitle>Csoportok Kezelése</PageTitle>
+
+<div class="row mb-4 align-items-center">
+    <div class="col">
+        <h1><i class="bi bi-people text-primary me-2"></i>Csoportok Kezelése</h1>
+        <p class="text-muted">Itt vehetsz fel új osztályokat és csoportokat a rendszerbe.</p>
+    </div>
+</div>
+
+<!-- ÚJ CSOPORT HOZZÁADÁSA (Űrlap) -->
+<div class="card bg-dark border-secondary mb-4 shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title text-light mb-3">Új csoport felvétele</h5>
+        <div class="row g-2 align-items-center">
+            <div class="col-md-4">
+                <!-- A @bind egy "kétirányú adatkapcsolat" (two-way binding).
+                     Ha ide beírsz valamit, az 'ujCsoportNev' C# változó azonnal frissül! -->
+                <input type="text" class="form-control" placeholder="Osztály/Csoport neve (pl. 10.A)" @bind="ujCsoportNev" @bind:event="oninput" />
+            </div>
+            <div class="col-auto">
+                <!-- A @onclick köti össze a gombnyomást a C# metódussal.
+                     A 'disabled' attribútum megakadályozza, hogy üres nevet mentsünk el. -->
+                <button class="btn btn-success" @onclick="Hozzaadas" disabled="@string.IsNullOrWhiteSpace(ujCsoportNev)">
+                    <i class="bi bi-plus-circle me-1"></i> Hozzáadás
+                </button>
+            </div>
+        </div>
+
+        <!-- Hibaüzenet megjelenítése, ha van -->
+        @if (!string.IsNullOrEmpty(hibaUzenet))
+        {
+            <div class="alert alert-danger mt-3">@hibaUzenet</div>
+        }
+    </div>
+</div>
+
+<!-- ADATOK LISTÁZÁSA -->
+@if (csoportok == null)
+{
+    <!-- Ha a lista null, az azt jelenti, hogy még dolgozik a Supabase lekérdezés -->
+    <div class="d-flex justify-content-center my-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Betöltés...</span>
+        </div>
+    </div>
+}
+else if (!csoportok.Any())
+{
+    <!-- Ha a lista nem null, de üres -->
+    <div class="alert alert-info border-info text-info bg-transparent">
+        <i class="bi bi-info-circle me-2"></i> Jelenleg nincs egyetlen csoport sem rögzítve az adatbázisban.
+    </div>
+}
+else
+{
+    <!-- Ha vannak adatok, megjelenítjük őket egy táblázatban -->
+    <div class="table-responsive shadow-sm rounded">
+        <table class="table table-dark table-striped table-hover mb-0">
+            <thead>
+                <tr>
+                    <th style="width: 80px;">ID</th>
+                    <th>Csoport Név</th>
+                    <th style="width: 120px;">Állapot</th>
+                    <th style="width: 250px;" class="text-end">Műveletek</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var cs in csoportok)
+                {
+                    <tr class="align-middle">
+                        <td><span class="badge bg-secondary">#@cs.CsoportId</span></td>
+                        <td>
+                            @if (szerkesztettId == cs.CsoportId)
+                            {
+                                <!-- Ha épp ezt a sort szerkesztjük, egy beviteli mezőt mutatunk -->
+                                <input type="text" class="form-control form-control-sm" @bind="szerkesztettNev" />
+                            }
+                            else
+                            {
+                                <!-- Különben csak kiírjuk a nevét -->
+                                <span class="@(!!cs.Aktiv ? "text-light" : "text-muted text-decoration-line-through")">
+                                    @cs.CsoportNev
+                                </span>
+                            }
+                        </td>
+                        <td>
+                            @if (cs.Aktiv)
+                            {
+                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i> Aktív</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i> Inaktív</span>
+                            }
+                        </td>
+                        <td class="text-end">
+                            @if (szerkesztettId == cs.CsoportId)
+                            {
+                                <!-- Műveletek szerkesztés közben -->
+                                <button class="btn btn-sm btn-success me-1" @onclick="() => Mentes(cs)">
+                                    <i class="bi bi-save"></i> Mentés
+                                </button>
+                                <button class="btn btn-sm btn-outline-light" @onclick="Megse">
+                                    Mégse
+                                </button>
+                            }
+                            else
+                            {
+                                <!-- Alapvető műveletek -->
+                                <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => Szerkesztes(cs)">
+                                    <i class="bi bi-pencil"></i> Szerkesztés
+                                </button>
+
+                                <!-- Állapotváltó gomb (Aktív/Inaktív). Dinamikusan változik a színe és a szövege is! -->
+                                <button class="btn btn-sm @(cs.Aktiv ? "btn-outline-warning" : "btn-outline-info")" @onclick="() => AllapotValtas(cs)">
+                                    <i class="bi @(cs.Aktiv ? "bi-archive" : "bi-arrow-counterclockwise")"></i>
+                                    @(cs.Aktiv ? "Deaktiválás" : "Aktiválás")
+                                </button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+
+@code {
+    // ------------------------------------------------------------------------
+    // ÁLLAPOT VÁLTOZÓK (STATE)
+    // Ezek a változók tárolják az oldal aktuális adatait. Ha módosulnak,
+    // a Blazor automatikusan újrarendereli a HTML azon részét, amit érint.
+    // ------------------------------------------------------------------------
+    private List<Csoport>? csoportok;
+    private string ujCsoportNev = "";
+    private string hibaUzenet = "";
+
+    // Ezeket a változókat az "inline" (soron belüli) szerkesztéshez használjuk
+    private long? szerkesztettId = null;
+    private string szerkesztettNev = "";
+
+    // ------------------------------------------------------------------------
+    // ÉLETCIKLUS METÓDUSOK
+    // Ez a metódus automatikusan lefut, amikor a komponens betöltődik.
+    // ------------------------------------------------------------------------
+    protected override async Task OnInitializedAsync()
+    {
+        await Betoltes(); // Azonnal betöltjük az adatokat a Supabase-ből
+    }
+
+    // ------------------------------------------------------------------------
+    // ADATBÁZIS MŰVELETEK
+    // ------------------------------------------------------------------------
+
+    // READ: Adatok lekérdezése
+    private async Task Betoltes()
+    {
+        try
+        {
+            hibaUzenet = ""; // Töröljük a korábbi hibaüzeneteket
+
+            // Supabase SQL megfelelője: SELECT * FROM "Csoportok" ORDER BY "CsoportId" ASC
+            // JAVÍTVA: A lambda kifejezés (x => x.CsoportId) helyett sztringként ("CsoportId") adjuk meg az oszlopnevet
+            var response = await Db.From<Csoport>()
+                                   .Order("CsoportId", Supabase.Postgrest.Constants.Ordering.Ascending)
+                                   .Get();
+            csoportok = response.Models;
+        }
+        catch (Exception ex)
+        {
+            hibaUzenet = "Hiba az adatok betöltésekor: " + ex.Message;
+        }
+    }
+
+    // CREATE: Új rekord felvitele
+    private async Task Hozzaadas()
+    {
+        if (string.IsNullOrWhiteSpace(ujCsoportNev)) return;
+
+        try
+        {
+            // Létrehozunk egy új C# objektumot
+            var ujCsoport = new Csoport
+            {
+                CsoportNev = ujCsoportNev,
+                Aktiv = true // Alapértelmezetten aktívként hozzuk létre
+            };
+
+            // Beküldjük az adatbázisba (INSERT)
+            await Db.From<Csoport>().Insert(ujCsoport);
+
+            // Sikeres mentés után kitakarítjuk a beviteli mezőt
+            ujCsoportNev = "";
+
+            // Újratöltjük a listát, hogy a felületen is megjelenjen az új csoport
+            await Betoltes();
+        }
+        catch (Exception ex)
+        {
+            hibaUzenet = "Hiba a hozzáadáskor: " + ex.Message;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // SZERKESZTÉS LOGIKÁJA
+    // ------------------------------------------------------------------------
+
+    // Ezt hívjuk meg, ha a felhasználó rákattint a "Szerkesztés" gombra
+    private void Szerkesztes(Csoport cs)
+    {
+        szerkesztettId = cs.CsoportId;     // Megjegyezzük, melyik ID-t szerkesztjük épp
+        szerkesztettNev = cs.CsoportNev ?? ""; // Bemásoljuk a régi nevet az input mezőbe
+    }
+
+    // Szerkesztés megszakítása
+    private void Megse()
+    {
+        szerkesztettId = null; // Ha null-ra állítjuk, a HTML-ben visszavált a sima szöveg nézetre
+    }
+
+    // UPDATE: Név módosítása
+    private async Task Mentes(Csoport cs)
+    {
+        try
+        {
+            cs.CsoportNev = szerkesztettNev; // A C# objektumban átírjuk a nevet az újra
+
+            // Frissítés az adatbázisban (UPDATE)
+            await Db.From<Csoport>().Update(cs);
+
+            szerkesztettId = null; // Kilépünk a szerkesztő módból
+            await Betoltes();      // Frissítjük a felületet
+        }
+        catch (Exception ex)
+        {
+            hibaUzenet = "Hiba a módosításkor: " + ex.Message;
+        }
+    }
+
+    // UPDATE: "Soft Delete" (Aktív/Inaktív állapot váltása)
+    private async Task AllapotValtas(Csoport cs)
+    {
+        try
+        {
+            cs.Aktiv = !cs.Aktiv; // Megfordítjuk a logikai értéket (true -> false, false -> true)
+
+            // Beküldjük a változást
+            await Db.From<Csoport>().Update(cs);
+            await Betoltes();
+        }
+        catch (Exception ex)
+        {
+            hibaUzenet = "Hiba az állapot változtatásakor: " + ex.Message;
+        }
+    }
+}
