@@ -23,5 +23,8 @@ namespace CheckPointAdmin.Models
 
         [Column("Aktiv")]
         public bool Aktiv { get; set; } = true;
+
+        [Column("VegeredmenyLathato")]
+        public bool VegeredmenyLathato { get; set; } = false;
     }
 }
