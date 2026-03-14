@@ -4,20 +4,20 @@
 
 <PageTitle>Tesztek Kiosztása</PageTitle>
 
-<div class="row mb-4">
+<div class="row mb-4 align-items-center">
     <div class="col">
         <h1><i class="bi bi-send-check text-primary me-2"></i>Tesztek Kiosztása</h1>
-        <p class="text-muted">Itt rendelheted hozzá a teszteket a csoportokhoz, és szabályozhatod az eredmények láthatóságát.</p>
+        <p class="text-muted">Rendelj teszteket a csoportokhoz, és állítsd be a vizsga paramétereit.</p>
     </div>
 </div>
 
 <!-- ÚJ KIOSZTÁS LÉTREHOZÁSA -->
 <div class="card bg-dark border-secondary mb-4 shadow-sm">
     <div class="card-body">
-        <h5 class="card-title text-light mb-3">Új kiosztás létrehozása</h5>
-        <div class="row g-3 align-items-end">
+        <h5 class="card-title text-light mb-3">Új kiosztás rögzítése</h5>
+        <div class="row g-3">
             <div class="col-md-3">
-                <label class="form-label small text-muted">Teszt</label>
+                <label class="form-label small text-muted">Teszt kiválasztása</label>
                 <select class="form-select bg-dark text-light border-secondary" @bind="ujTesztId">
                     <option value="0">-- Válassz tesztet --</option>
                     @if (tesztek != null)
@@ -30,7 +30,7 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <label class="form-label small text-muted">Csoport</label>
+                <label class="form-label small text-muted">Célcsoport</label>
                 <select class="form-select bg-dark text-light border-secondary" @bind="ujCsoportId">
                     <option value="0">-- Válassz csoportot --</option>
                     @if (csoportok != null)
@@ -42,20 +42,32 @@
                     }
                 </select>
             </div>
-            <div class="col-md-2">
-                <label class="form-label small text-muted">Határidő</label>
+            <div class="col-md-3">
+                <label class="form-label small text-muted">Határidő (opcionális)</label>
                 <input type="datetime-local" class="form-control bg-dark text-light border-secondary" @bind="ujHatarido" />
             </div>
-            <div class="col-md-2">
-                <div class="form-check form-switch mb-2">
-                    <input class="form-check-input" type="checkbox" id="ujVegeredmeny" @bind="ujVegeredmenyLathato">
-                    <label class="form-check-label small text-muted" for="ujVegeredmeny">Válaszok láthatók</label>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <button class="btn btn-success w-100" @onclick="KiosztasMentese" disabled="@(ujTesztId == 0 || ujCsoportId == 0)">
-                    <i class="bi bi-plus-lg me-1"></i> Kiosztás
+            <div class="col-md-3 d-flex align-items-end">
+                <button class="btn btn-success w-100 fw-bold" @onclick="KiosztasMentese" disabled="@(ujTesztId == 0 || ujCsoportId == 0)">
+                    <i class="bi bi-plus-lg me-1"></i> Kiosztás rögzítése
                 </button>
+            </div>
+
+            <!-- VÉLETLENSZERŰSÉG ÉS LÁTHATÓSÁG BEÁLLÍTÁSOK -->
+            <div class="col-12 mt-2">
+                <div class="d-flex flex-wrap gap-4 p-2 bg-black bg-opacity-25 rounded border border-secondary border-opacity-25">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="qRand" @bind="ujKerdesekVeletlen">
+                        <label class="form-check-label small text-muted" for="qRand">Véletlen kérdés sorrend</label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="aRand" @bind="ujValaszokVeletlen">
+                        <label class="form-check-label small text-muted" for="aRand">Véletlen válasz sorrend</label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="vShow" @bind="ujVegeredmenyLathato">
+                        <label class="form-check-label small text-muted" for="vShow">Végelemzés megengedve</label>
+                    </div>
+                </div>
             </div>
         </div>
         @if (!string.IsNullOrEmpty(hibaUzenet))
@@ -65,14 +77,15 @@
     </div>
 </div>
 
+<!-- KIOSZTÁSOK LISTÁJA -->
 @if (kiosztasok == null)
 {
     <div class="text-center my-5"><div class="spinner-border text-primary"></div></div>
 }
 else if (!kiosztasok.Any())
 {
-    <div class="alert alert-info bg-transparent border-info text-info text-center">
-        Még nincs egyetlen aktív kiosztás sem.
+    <div class="alert alert-info bg-transparent border-info text-info text-center p-4">
+        Még nem történt egyetlen tesztkiosztás sem.
     </div>
 }
 else
@@ -81,10 +94,10 @@ else
         <table class="table table-dark table-striped table-hover mb-0 border-secondary">
             <thead>
                 <tr>
-                    <th>Teszt</th>
+                    <th>Teszt / Létrehozva</th>
                     <th>Csoport</th>
+                    <th class="text-center">Beállítások</th>
                     <th>Határidő</th>
-                    <th class="text-center">Válaszok</th>
                     <th style="width: 250px;" class="text-end">Műveletek</th>
                 </tr>
             </thead>
@@ -98,8 +111,8 @@ else
                         <td>
                             @if (szerkesztettId == k.KiosztasId)
                             {
-                                <select class="form-select form-select-sm bg-dark text-light" @bind="szerkesztettTesztId">
-                                    @foreach (var t in tesztek!)
+                                <select class="form-select form-select-sm bg-dark text-light border-secondary" @bind="szerkesztettTesztId">
+                                    @foreach (var t in tesztek!.Where(x => x.Aktiv || x.TesztId == k.TesztId))
                                     {
                                         <option value="@t.TesztId">@t.TesztCime</option>
                                     }
@@ -107,14 +120,15 @@ else
                             }
                             else
                             {
-                                <span class="fw-bold text-info">@(teszt?.TesztCime ?? "Ismeretlen")</span>
+                                <div class="fw-bold text-info">@(teszt?.TesztCime ?? "Ismeretlen teszt")</div>
+                                <small class="text-muted">@k.Letrehozva.ToString("yyyy.MM.dd. HH:mm")</small>
                             }
                         </td>
                         <td>
                             @if (szerkesztettId == k.KiosztasId)
                             {
-                                <select class="form-select form-select-sm bg-dark text-light" @bind="szerkesztettCsoportId">
-                                    @foreach (var cs in csoportok!)
+                                <select class="form-select form-select-sm bg-dark text-light border-secondary" @bind="szerkesztettCsoportId">
+                                    @foreach (var cs in csoportok!.Where(x => x.Aktiv || x.CsoportId == k.CsoportId))
                                     {
                                         <option value="@cs.CsoportId">@cs.CsoportNev</option>
                                     }
@@ -125,43 +139,57 @@ else
                                 <span class="badge bg-secondary">@(csoport?.CsoportNev ?? "Ismeretlen")</span>
                             }
                         </td>
+                        <td class="text-center">
+                            @if (szerkesztettId == k.KiosztasId)
+                            {
+                                <div class="d-flex flex-column gap-1 align-items-center">
+                                    <div class="form-check form-switch small" title="Kérdéskeverés">
+                                        <input class="form-check-input" type="checkbox" @bind="szerkesztettKerdesekVeletlen">
+                                        <i class="bi bi-shuffle text-success ms-1"></i>
+                                    </div>
+                                    <div class="form-check form-switch small" title="Válaszkeverés">
+                                        <input class="form-check-input" type="checkbox" @bind="szerkesztettValaszokVeletlen">
+                                        <i class="bi bi-shuffle text-info ms-1"></i>
+                                    </div>
+                                    <div class="form-check form-switch small" title="Eredményelemzés">
+                                        <input class="form-check-input" type="checkbox" @bind="szerkesztettVegeredmenyLathato">
+                                        <i class="bi bi-eye-fill text-warning ms-1"></i>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="d-flex justify-content-center gap-2">
+                                    <i class="bi @(k.KerdesekVeletlen ? "bi-shuffle text-success" : "bi-list-ol text-muted")" title="Kérdéskeverés"></i>
+                                    <i class="bi @(k.ValaszokVeletlen ? "bi-shuffle text-info" : "bi-list-ul text-muted")" title="Válaszkeverés"></i>
+                                    <i class="bi @(k.VegeredmenyLathato ? "bi-eye-fill text-warning" : "bi-eye-slash text-muted")" title="Eredményelemzés"></i>
+                                </div>
+                            }
+                        </td>
                         <td>
                             @if (szerkesztettId == k.KiosztasId)
                             {
-                                <input type="datetime-local" class="form-control form-control-sm bg-dark text-light" @bind="szerkesztettHatarido" />
+                                <input type="datetime-local" class="form-control form-control-sm bg-dark text-light border-secondary" @bind="szerkesztettHatarido" />
                             }
                             else
                             {
                                 @if (k.Hatarido.HasValue)
                                 {
                                     <span class="@(k.Hatarido < DateTime.Now ? "text-danger" : "text-light") small">
-                                        <i class="bi bi-clock me-1"></i>@k.Hatarido.Value.ToString("yyyy.MM.dd. HH:mm")
+                                        <i class="bi bi-calendar-event me-1"></i>@k.Hatarido.Value.ToString("yyyy.MM.dd. HH:mm")
                                     </span>
                                 }
                                 else
                                 {
-                                    <span class="text-muted small">Nincs határidő</span>
+                                    <span class="text-muted small">Nincs megadva</span>
                                 }
-                            }
-                        </td>
-                        <td class="text-center">
-                            @if (szerkesztettId == k.KiosztasId)
-                            {
-                                <div class="form-check form-switch d-inline-block">
-                                    <input class="form-check-input" type="checkbox" @bind="szerkesztettVegeredmenyLathato">
-                                </div>
-                            }
-                            else
-                            {
-                                <i class="bi @(k.VegeredmenyLathato ? "bi-eye-fill text-success" : "bi-eye-slash-fill text-muted")"
-                                   title="@(k.VegeredmenyLathato ? "Tanulók látják a megoldást" : "Megoldás rejtve")"></i>
                             }
                         </td>
                         <td class="text-end">
                             @if (szerkesztettId == k.KiosztasId)
                             {
                                 <button class="btn btn-sm btn-success me-1" @onclick="() => Mentes(k)">
-                                    <i class="bi bi-save"></i> Mentés
+                                    <i class="bi bi-save me-1"></i> Mentés
                                 </button>
                                 <button class="btn btn-sm btn-outline-light" @onclick="Megse">
                                     Mégse
@@ -170,10 +198,13 @@ else
                             else
                             {
                                 <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => Szerkesztes(k)">
-                                    <i class="bi bi-pencil"></i> Szerkesztés
+                                    <i class="bi bi-pencil"></i>
                                 </button>
-                                <button class="btn btn-sm btn-outline-danger" @onclick="() => KiosztasTorlese(k.KiosztasId)">
-                                    <i class="bi bi-trash"></i> Visszavonás
+                                <button class="btn btn-sm @(k.Aktiv ? "btn-outline-warning" : "btn-outline-success") me-1" @onclick="() => AllapotValtas(k)" title="@(k.Aktiv ? "Szüneteltetés" : "Aktiválás")">
+                                    <i class="bi @(k.Aktiv ? "bi-pause-fill" : "bi-play-fill")"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => Torles(k.KiosztasId)" title="Törlés">
+                                    <i class="bi bi-trash"></i>
                                 </button>
                             }
                         </td>
@@ -193,14 +224,19 @@ else
     private long ujTesztId = 0;
     private long ujCsoportId = 0;
     private DateTime? ujHatarido;
+    private bool ujKerdesekVeletlen = false;
+    private bool ujValaszokVeletlen = false;
     private bool ujVegeredmenyLathato = false;
+
     private string hibaUzenet = "";
 
-    // Szerkesztés változók
+    // Szerkesztési állapot változók
     private long? szerkesztettId = null;
     private long szerkesztettTesztId;
     private long szerkesztettCsoportId;
     private DateTime? szerkesztettHatarido;
+    private bool szerkesztettKerdesekVeletlen;
+    private bool szerkesztettValaszokVeletlen;
     private bool szerkesztettVegeredmenyLathato;
 
     protected override async Task OnInitializedAsync() => await Betoltes();
@@ -219,7 +255,7 @@ else
             csoportok = cTask.Result.Models;
             kiosztasok = kTask.Result.Models;
         }
-        catch (Exception ex) { hibaUzenet = "Hiba a betöltéskor: " + ex.Message; }
+        catch (Exception ex) { hibaUzenet = "Hiba az adatok szinkronizálásakor: " + ex.Message; }
     }
 
     private async Task KiosztasMentese()
@@ -231,15 +267,21 @@ else
                 TesztId = ujTesztId,
                 CsoportId = ujCsoportId,
                 Hatarido = ujHatarido,
+                KerdesekVeletlen = ujKerdesekVeletlen,
+                ValaszokVeletlen = ujValaszokVeletlen,
                 VegeredmenyLathato = ujVegeredmenyLathato,
                 Aktiv = true
             };
 
             await Db.From<Kiosztas>().Insert(uj);
-            ujTesztId = 0; ujCsoportId = 0; ujHatarido = null; ujVegeredmenyLathato = false;
+
+            // Alaphelyzet
+            ujTesztId = 0; ujCsoportId = 0; ujHatarido = null;
+            ujKerdesekVeletlen = false; ujValaszokVeletlen = false; ujVegeredmenyLathato = false;
+
             await Betoltes();
         }
-        catch (Exception ex) { hibaUzenet = "Sikertelen mentés: " + ex.Message; }
+        catch (Exception ex) { hibaUzenet = "Hiba a mentés során: " + ex.Message; }
     }
 
     private void Szerkesztes(Kiosztas k)
@@ -248,10 +290,15 @@ else
         szerkesztettTesztId = k.TesztId;
         szerkesztettCsoportId = k.CsoportId;
         szerkesztettHatarido = k.Hatarido;
+        szerkesztettKerdesekVeletlen = k.KerdesekVeletlen;
+        szerkesztettValaszokVeletlen = k.ValaszokVeletlen;
         szerkesztettVegeredmenyLathato = k.VegeredmenyLathato;
     }
 
-    private void Megse() => szerkesztettId = null;
+    private void Megse()
+    {
+        szerkesztettId = null;
+    }
 
     private async Task Mentes(Kiosztas k)
     {
@@ -260,6 +307,8 @@ else
             k.TesztId = szerkesztettTesztId;
             k.CsoportId = szerkesztettCsoportId;
             k.Hatarido = szerkesztettHatarido;
+            k.KerdesekVeletlen = szerkesztettKerdesekVeletlen;
+            k.ValaszokVeletlen = szerkesztettValaszokVeletlen;
             k.VegeredmenyLathato = szerkesztettVegeredmenyLathato;
 
             await Db.From<Kiosztas>().Update(k);
@@ -269,7 +318,18 @@ else
         catch (Exception ex) { hibaUzenet = "Hiba a módosításkor: " + ex.Message; }
     }
 
-    private async Task KiosztasTorlese(long id)
+    private async Task AllapotValtas(Kiosztas k)
+    {
+        try
+        {
+            k.Aktiv = !k.Aktiv;
+            await Db.From<Kiosztas>().Update(k);
+            await Betoltes();
+        }
+        catch (Exception ex) { hibaUzenet = "Hiba az állapot módosításakor: " + ex.Message; }
+    }
+
+    private async Task Torles(long id)
     {
         try
         {
