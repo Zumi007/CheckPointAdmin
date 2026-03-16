@@ -1,0 +1,352 @@
+﻿@page "/eredmenyek"
+@page "/eredmenyek/{KiosztasId:long}"
+@using CheckPointAdmin.Models
+@using System.Globalization
+@using static Supabase.Postgrest.Constants
+@inject Supabase.Client Db
+
+<PageTitle>Eredmények Monitoring</PageTitle>
+
+<div class="row mb-4 align-items-center">
+    <div class="col">
+        <h1><i class="bi bi-graph-up-arrow text-primary me-2"></i>Eredmények</h1>
+        <p class="text-muted">Tanulói haladás és vizsgaeredmények követése (Folyamatban lévő kitöltésekkel).</p>
+    </div>
+    @if (KiosztasId > 0)
+    {
+        <div class="col-auto">
+            <button class="btn btn-outline-info shadow-sm fw-bold" @onclick="AdatokBetoltese" title="Adatok frissítése" disabled="@isBusy">
+                <i class="bi bi-arrow-clockwise @(isBusy ? "spinner-border-sm" : "") me-1"></i>
+                @(isBusy ? "Frissítés..." : "Frissítés")
+            </button>
+        </div>
+    }
+</div>
+
+<!-- KIOSZTÁS VÁLASZTÓ -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card bg-dark border-secondary shadow-sm">
+            <div class="card-body">
+                <label class="form-label small text-muted text-uppercase fw-bold">Válassz egy kiosztott tesztet:</label>
+                <select class="form-select bg-dark text-light border-secondary shadow-none" @onchange="KiosztasValtva">
+                    <option value="0">-- Válassz a listából --</option>
+                    @if (kiosztasAdatok != null)
+                    {
+                        @foreach (var ka in kiosztasAdatok)
+                        {
+                            <option value="@ka.Kiosztas.KiosztasId" selected="@(KiosztasId == ka.Kiosztas.KiosztasId)">
+                                @ka.TesztCim (@ka.CsoportNev) - @ka.Kiosztas.Letrehozva.ToString("yyyy.MM.dd HH:mm")
+                            </option>
+                        }
+                    }
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (KiosztasId > 0 && kivalasztottKiosztas != null)
+{
+    <!-- ÖSSZESÍTŐ STATISZTIKA -->
+    <div class="row g-4 mb-4 animate-fade">
+        <div class="col-md-4">
+            <div class="card bg-dark border-primary border-start border-4 shadow-sm h-100">
+                <div class="card-body py-3 text-center">
+                    <small class="text-muted text-uppercase fw-bold d-block mb-1">Csoport létszám</small>
+                    <h3 class="mb-0">@csoportTanulok?.Count fős</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-dark border-success border-start border-4 shadow-sm h-100">
+                <div class="card-body py-3 text-center">
+                    <small class="text-muted text-uppercase fw-bold d-block mb-1">Állapot (Kész / Aktív)</small>
+                    <h3 class="mb-0">
+                        <span class="text-success">@(eredmenyek?.Count(x => x.Befejezve) ?? 0)</span>
+                        <span class="text-muted mx-2">/</span>
+                        <span class="text-warning">@(eredmenyek?.Count(x => !x.Befejezve) ?? 0)</span>
+                    </h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-dark border-info border-start border-4 shadow-sm h-100">
+                <div class="card-body py-3 text-center">
+                    <small class="text-muted text-uppercase fw-bold d-block mb-1">Átlag (Kész tesztek)</small>
+                    @{
+                        var keszEredmenyek = eredmenyek?.Where(x => x.Befejezve).ToList();
+                        var atlag = keszEredmenyek?.Any() == true ? Math.Round(keszEredmenyek.Average(x => (double)x.Szazalek), 1) : 0;
+                    }
+                    <h3 class="mb-0 @GetColorClassForPercent((decimal)atlag)">@atlag%</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TANULÓI LISTA -->
+    <div class="table-responsive rounded shadow-sm border border-secondary animate-fade">
+        <table class="table table-dark table-striped table-hover mb-0">
+            <thead>
+                <tr>
+                    <th class="ps-4">Név</th>
+                    <th class="text-center">Állapot</th>
+                    <th class="text-center">Pontszám (Eddig)</th>
+                    <th class="text-center" style="width: 280px;">Eredmény</th>
+                    <th class="text-center">Jegy</th>
+                    <th class="text-end pe-4">Befejezve</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (csoportTanulok != null)
+                {
+                    @foreach (var tanulo in csoportTanulok.OrderBy(x => x.Nev))
+                    {
+                        var eredmeny = eredmenyek?.FirstOrDefault(x => x.TanuloId == tanulo.TanuloId);
+                        <tr class="align-middle">
+                            <td class="ps-4 fw-bold">@tanulo.Nev</td>
+                            <td class="text-center">
+                                @if (eredmeny == null)
+                                {
+                                    <span class="badge bg-secondary bg-opacity-10 text-muted border border-secondary border-opacity-25 px-3">NEM KEZDTE EL</span>
+                                }
+                                else if (!eredmeny.Befejezve)
+                                {
+                                    <span class="badge bg-warning text-dark border border-warning px-3 animate-pulse">FOLYAMATBAN</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3">KÉSZ</span>
+                                }
+                            </td>
+                            <td class="text-center text-info">
+                                @(eredmeny != null ? $"{eredmeny.Pontszam} / {eredmeny.OsszKerdes}" : "---")
+                            </td>
+                            <td class="text-center">
+                                @if (eredmeny != null)
+                                {
+                                    <div class="d-flex align-items-center gap-2 px-3">
+                                        <div class="progress flex-grow-1 bg-secondary bg-opacity-25 shadow-sm" style="height: 16px; border-radius: 8px; overflow: hidden;">
+                                            <div class="progress-bar @(!eredmeny.Befejezve ? "progress-bar-striped progress-bar-animated bg-warning" : GetProgressBarColorClass(eredmeny.Szazalek))"
+                                                 role="progressbar"
+                                                 style="width: @(eredmeny.Szazalek.ToString(CultureInfo.InvariantCulture))%;">
+                                            </div>
+                                        </div>
+                                        <span class="small fw-bold @(!eredmeny.Befejezve ? "text-warning" : GetColorClassForPercent(eredmeny.Szazalek))" style="min-width: 45px;">@eredmeny.Szazalek%</span>
+                                    </div>
+                                }
+                                else
+                                {
+
+                                    <span class="text-muted small italic">---</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (eredmeny != null && eredmeny.Befejezve)
+                                {
+                                    var jegy = GetGradeFromPercent(eredmeny.Szazalek);
+                                    <span class="badge rounded-circle p-2 fs-6 shadow-sm @GetGradeColorClass(jegy)"
+                                          style="width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;">
+                                        @jegy
+                                    </span>
+                                }
+                                else if (eredmeny != null && !eredmeny.Befejezve)
+                                {
+
+                                    <i class="bi bi-hourglass-split text-warning fs-5"></i>
+                                }
+                                else
+                                {
+
+                                    <span class="text-muted">---</span>
+                                }
+                            </td>
+                            <td class="text-end pe-4 small text-muted">
+                                @(eredmeny != null ? (eredmeny.Befejezve ? eredmeny.Kitoltve.ToString("yyyy.MM.dd. HH:mm") : "Aktív most...") : "---")
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+}
+else
+{
+    <div class="card bg-dark border-secondary border-opacity-25 p-5 text-center shadow-sm">
+        <i class="bi bi-info-circle text-info display-4 mb-3"></i>
+        <h4 class="text-info fw-bold">Nincs kiválasztott kiosztás</h4>
+        <p class="text-muted">Kérjük, válasszon egyet a fenti listából a monitoring indításához.</p>
+    </div>
+}
+
+<style>
+    .animate-fade {
+        animation: fadeIn 0.4s ease-out;
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(5px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .animate-pulse {
+        animation: pulse 2s infinite;
+    }
+
+    @@keyframes pulse {
+        0% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: 0.6;
+        }
+
+        100% {
+            opacity: 1;
+        }
+    }
+</style>
+
+@code {
+    [Parameter] public long KiosztasId { get; set; }
+
+    private class KiosztasAdatDisplay
+    {
+        public Kiosztas Kiosztas { get; set; } = null!;
+        public string TesztCim { get; set; } = "";
+        public string CsoportNev { get; set; } = "";
+    }
+
+    private List<KiosztasAdatDisplay>? kiosztasAdatok;
+    private Kiosztas? kivalasztottKiosztas;
+    private List<Tanulo>? csoportTanulok;
+    private List<Eredmeny>? eredmenyek;
+    private bool isBusy = false;
+
+    // --- SEGÉDMETÓDUSOK ---
+
+    private int GetGradeFromPercent(decimal szazalek)
+    {
+        if (szazalek >= 85) return 5;
+        if (szazalek >= 70) return 4;
+        if (szazalek >= 55) return 3;
+        if (szazalek >= 40) return 2;
+        return 1;
+    }
+
+    private string GetGradeColorClass(int jegy) => jegy switch
+    {
+        5 => "bg-success text-white",
+        4 => "bg-info text-dark",
+        3 => "bg-primary text-white",
+        2 => "bg-warning text-dark",
+        _ => "bg-danger text-white"
+    };
+
+    private string GetProgressBarColorClass(decimal szazalek)
+    {
+        if (szazalek >= 85) return "bg-success";
+        if (szazalek >= 70) return "bg-info";
+        if (szazalek >= 55) return "bg-primary";
+        if (szazalek >= 40) return "bg-warning";
+        return "bg-danger";
+    }
+
+    private string GetColorClassForPercent(decimal szazalek)
+    {
+        if (szazalek >= 85) return "text-success";
+        if (szazalek >= 70) return "text-info";
+        if (szazalek >= 40) return "text-warning";
+        if (szazalek > 0) return "text-danger";
+        return "text-white";
+    }
+
+    // --- ADATKEZELÉS ---
+
+    protected override async Task OnInitializedAsync()
+    {
+        await KiosztasokBetoltese();
+        if (KiosztasId > 0) await AdatokBetoltese();
+    }
+
+    private async Task KiosztasokBetoltese()
+    {
+        try
+        {
+            var kResp = await Db.From<Kiosztas>().Order("Letrehozva", Ordering.Descending).Get();
+            var tResp = await Db.From<Teszt>().Get();
+            var csResp = await Db.From<Csoport>().Get();
+
+            kiosztasAdatok = kResp.Models.Select(k => new KiosztasAdatDisplay
+            {
+                Kiosztas = k,
+                TesztCim = tResp.Models.FirstOrDefault(t => t.TesztId == k.TesztId)?.TesztCime ?? "Ismeretlen",
+                CsoportNev = csResp.Models.FirstOrDefault(c => c.CsoportId == k.CsoportId)?.CsoportNev ?? "Ismeretlen"
+            }).ToList();
+        }
+        catch (Exception ex) { Console.WriteLine("Hiba a kiosztások betöltésekor: " + ex.Message); }
+    }
+
+    private async Task KiosztasValtva(ChangeEventArgs e)
+    {
+        if (long.TryParse(e.Value?.ToString(), out var id) && id > 0)
+        {
+            KiosztasId = id;
+            await AdatokBetoltese();
+        }
+        else
+        {
+            KiosztasId = 0;
+            kivalasztottKiosztas = null;
+        }
+    }
+
+    private async Task AdatokBetoltese()
+    {
+        if (KiosztasId <= 0) return;
+
+        isBusy = true;
+        StateHasChanged();
+
+        try
+        {
+            var display = kiosztasAdatok?.FirstOrDefault(x => x.Kiosztas.KiosztasId == KiosztasId);
+            if (display == null) return;
+
+            kivalasztottKiosztas = display.Kiosztas;
+
+            // Csoport tanulóinak lekérése
+            var tResp = await Db.From<Tanulo>()
+                .Where(x => x.CsoportId == kivalasztottKiosztas.CsoportId)
+                .Get();
+            csoportTanulok = tResp.Models;
+
+            // Eredmények lekérése ehhez a teszthez
+            var eResp = await Db.From<Eredmeny>()
+                .Where(x => x.TesztId == kivalasztottKiosztas.TesztId)
+                .Get();
+
+            // Csak a kiválasztott csoport tanulóinak eredményeit tartjuk meg
+            var tanuloIds = csoportTanulok.Select(x => x.TanuloId).ToList();
+            eredmenyek = eResp.Models
+                .Where(x => tanuloIds.Contains(x.TanuloId))
+                .OrderByDescending(x => x.Kitoltve)
+                .ToList();
+        }
+        catch (Exception ex) { Console.WriteLine("Hiba az adatok frissítésekor: " + ex.Message); }
+        finally
+        {
+            isBusy = false;
+            StateHasChanged();
+        }
+    }
+}
