@@ -9,7 +9,7 @@
 <div class="row mb-4">
     <div class="col">
         <h1><i class="bi bi-file-earmark-arrow-up text-primary me-2"></i>Tesztek Kezelése</h1>
-        <p class="text-muted">Kezeld manuálisan tesztjeidet, vagy hasznáid az AI Segédet és az importálást.</p>
+        <p class="text-muted">Kezeld manuálisan tesztjeidet, vagy használd az AI Segédet és az importálást.</p>
     </div>
 </div>
 
@@ -31,7 +31,7 @@
 {
     <div class="row g-4">
         <!-- AI PROMPT GENERÁTOR -->
-        <div class="col-lg-6">
+        <div class="col-lg-5">
             <div class="card bg-dark border-primary h-100 shadow">
                 <div class="card-body">
                     <h5 class="text-primary mb-3"><i class="bi bi-robot me-2"></i>AI Prompt Segéd</h5>
@@ -61,9 +61,17 @@
                         </div>
                     </div>
 
+                    <!-- ÚJ MEZŐ: EGYÉB KÉRÉSEK -->
+                    <div class="mb-3">
+                        <label class="form-label small">Egyéb kérések (opcionális)</label>
+                        <textarea class="form-control bg-dark text-light border-secondary" rows="2"
+                                  placeholder="Pl. legyen hangsúlyos a történelem rész, vagy kerüljük a matematikai feladatokat..."
+                                  @bind="promptEgyeb" @bind:event="oninput"></textarea>
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label small text-info">Generált utasítás (Prompt):</label>
-                        <textarea class="form-control bg-black text-info border-info x-small" rows="8" readonly value="@GeneralatPrompt"></textarea>
+                        <textarea class="form-control bg-black text-info border-info x-small" rows="5" readonly value="@GeneralatPrompt"></textarea>
                     </div>
 
                     <button class="btn btn-outline-primary w-100" @onclick="MasolasVagolapra">
@@ -78,21 +86,44 @@
             </div>
         </div>
 
-        <!-- XML FELTÖLTÉS -->
-        <div class="col-lg-6">
+        <!-- XML IMPORTÁLÁS -->
+        <div class="col-lg-7">
             <div class="card bg-dark border-secondary h-100 shadow-sm">
-                <div class="card-body text-center d-flex flex-column justify-content-center py-5">
-                    <h5 class="text-light mb-3"><i class="bi bi-upload me-2"></i>XML Fájl Importálása</h5>
-                    <div class="d-flex justify-content-center mb-4">
-                        <InputFile OnChange="HandleFileSelected" class="form-control w-75 bg-dark text-light border-secondary" accept=".xml" />
+                <div class="card-body">
+                    <h5 class="text-light mb-4"><i class="bi bi-upload me-2"></i>Teszt Importálása</h5>
+
+                    <div class="mb-4 p-3 bg-black bg-opacity-25 rounded border border-secondary border-opacity-50">
+                        <label class="form-label small text-muted">Válassz ki egy XML fájlt:</label>
+                        <InputFile OnChange="HandleFileSelected" class="form-control bg-dark text-light border-secondary" accept=".xml" />
                     </div>
+
+                    <div class="text-center my-3">
+                        <span class="badge bg-secondary px-3">VAGY</span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Illeszd be az XML tartalmat ide:</label>
+                        <textarea class="form-control bg-black text-light border-secondary font-monospace small"
+                                  rows="8" @bind="beillesztettXml" placeholder="<Teszt cim=... > ... </Teszt>"></textarea>
+                    </div>
+
+                    <button class="btn btn-primary w-100 shadow-sm" @onclick="HandleTextImport" disabled="@(isImporting || string.IsNullOrWhiteSpace(beillesztettXml))">
+                        <i class="bi bi-clipboard-check me-2"></i>Importálás a szövegmezőből
+                    </button>
+
                     @if (isImporting)
                     {
-                        <div class="my-3"><div class="spinner-border text-primary mb-2"></div><p class="text-info small">@importStatusz</p></div>
+                        <div class="text-center mt-4">
+                            <div class="spinner-border text-primary mb-2"></div>
+                            <p class="text-info small">@importStatusz</p>
+                        </div>
                     }
+
                     @if (!string.IsNullOrEmpty(hibaUzenet))
                     {
-                        <div class="alert alert-danger mt-4 small">@hibaUzenet</div>
+                        <div class="alert alert-danger mt-4 small animate-fade shadow-sm">
+                            <i class="bi bi-exclamation-octagon me-2"></i>@hibaUzenet
+                        </div>
                     }
                 </div>
             </div>
@@ -101,7 +132,7 @@
 }
 else
 {
-    <!-- MANUÁLIS HOZZÁADÁS -->
+    <!-- LISTA ÉS MANUÁLIS KEZELÉS -->
     <div class="card bg-dark border-secondary mb-4 shadow-sm">
         <div class="card-body">
             <h5 class="card-title text-light mb-3">Új teszt alapadatai</h5>
@@ -188,14 +219,28 @@ else
                                     {
                                         @foreach (var k in kerdesek.Where(k => k.TesztId == t.TesztId))
                                         {
-                                            <div class="card bg-dark border-secondary mb-2 shadow-sm">
-                                                <div class="card-body p-2 d-flex justify-content-between align-items-center">
-                                                    <span><strong class="text-info me-2">K:</strong> @k.KerdesSzoveg</span>
-                                                    <div>
-                                                        <button class="btn btn-sm btn-link text-info p-0 me-3 text-decoration-none" @onclick="() => ToggleValaszok(k.KerdesId)">
-                                                            Válaszok (@(valaszok?.Count(v => v.KerdesId == k.KerdesId) ?? 0))
-                                                        </button>
-                                                        <button class="btn btn-sm btn-outline-danger border-0" @onclick="() => KerdesTorles(k.KerdesId)"><i class="bi bi-trash"></i></button>
+                                            <div class="card bg-dark border-secondary mb-3 shadow-sm">
+                                                <div class="card-body p-2">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        @if (szerkesztettKerdesId == k.KerdesId)
+                                                        {
+                                                            <div class="input-group input-group-sm">
+                                                                <input type="text" class="form-control bg-dark text-light border-info" @bind="szerkesztettKerdesSzoveg" />
+                                                                <button class="btn btn-success" @onclick="() => KerdesMentes(k)"><i class="bi bi-check-lg"></i></button>
+                                                                <button class="btn btn-outline-light" @onclick="KerdesSzerkesztesMegse"><i class="bi bi-x-lg"></i></button>
+                                                            </div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span><strong class="text-info me-2">K:</strong> @k.KerdesSzoveg</span>
+                                                            <div class="text-nowrap">
+                                                                <button class="btn btn-sm btn-link text-info p-0 me-3 text-decoration-none" @onclick="() => ToggleValaszok(k.KerdesId)">
+                                                                    Válaszok (@(valaszok?.Count(v => v.KerdesId == k.KerdesId) ?? 0))
+                                                                </button>
+                                                                <button class="btn btn-sm btn-link text-primary p-0 me-2" @onclick="() => KerdesSzerkesztesInditas(k)"><i class="bi bi-pencil"></i></button>
+                                                                <button class="btn btn-sm btn-outline-danger border-0" @onclick="() => KerdesTorles(k.KerdesId)"><i class="bi bi-trash"></i></button>
+                                                            </div>
+                                                        }
                                                     </div>
                                                 </div>
                                                 @if (nyitottKerdesek.Contains(k.KerdesId) && valaszok != null)
@@ -203,11 +248,41 @@ else
                                                     <div class="card-footer bg-black bg-opacity-10 border-top border-secondary">
                                                         @foreach (var v in valaszok.Where(v => v.KerdesId == k.KerdesId))
                                                         {
-                                                            <div class="small py-1 border-bottom border-secondary border-opacity-10 d-flex justify-content-between">
-                                                                <span><i class="bi @(v.Helyes ? "bi-check-circle-fill text-success" : "bi-circle text-muted") me-2"></i>@v.ValaszSzoveg</span>
-                                                                <button class="btn btn-sm btn-link text-danger p-0 ms-2" @onclick="() => ValaszTorles(v.ValaszId)"><i class="bi bi-x"></i></button>
-                                                            </div>
+                                                            @if (szerkesztettValaszId == v.ValaszId)
+                                                            {
+                                                                <div class="input-group input-group-sm mb-1 mt-1">
+                                                                    <div class="input-group-text bg-dark border-secondary">
+                                                                        <input class="form-check-input mt-0" type="checkbox" @bind="szerkesztettValaszHelyes">
+                                                                        <span class="ms-2 small text-muted">Helyes?</span>
+                                                                    </div>
+                                                                    <input type="text" class="form-control bg-dark text-light border-secondary" @bind="szerkesztettValaszSzoveg">
+                                                                    <button class="btn btn-success" @onclick="() => ValaszMentes(v)"><i class="bi bi-check-lg"></i></button>
+                                                                    <button class="btn btn-outline-light" @onclick="ValaszSzerkesztesMegse"><i class="bi bi-x-lg"></i></button>
+                                                                </div>
+                                                            }
+                                                            else
+                                                            {
+                                                                <div class="small py-2 border-bottom border-secondary border-opacity-10 d-flex justify-content-between align-items-center">
+                                                                    <span>
+                                                                        <i class="bi @(v.Helyes ? "bi-check-circle-fill text-success" : "bi-circle text-muted") me-2"></i>
+                                                                        @v.ValaszSzoveg
+                                                                    </span>
+                                                                    <div class="text-nowrap">
+                                                                        <button class="btn btn-sm btn-link text-info p-0 me-2" @onclick="() => ValaszSzerkesztesInditas(v)"><i class="bi bi-pencil"></i></button>
+                                                                        <button class="btn btn-sm btn-link text-danger p-0 ms-1" @onclick="() => ValaszTorles(v.ValaszId)"><i class="bi bi-x-circle"></i></button>
+                                                                    </div>
+                                                                </div>
+                                                            }
                                                         }
+                                                        <div class="mt-2 pt-2 border-top border-secondary border-opacity-25">
+                                                            <div class="input-group input-group-sm">
+                                                                <div class="input-group-text bg-dark border-secondary">
+                                                                    <input class="form-check-input mt-0" type="checkbox" @bind="ujValaszHelyes">
+                                                                </div>
+                                                                <input type="text" class="form-control bg-dark text-light border-secondary" placeholder="Új válasz rögzítése..." @bind="ujValaszSzoveg" />
+                                                                <button class="btn btn-outline-success" @onclick="() => ValaszHozzaadas(k.KerdesId)"><i class="bi bi-plus-lg"></i> Hozzáadás</button>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 }
                                             </div>
@@ -237,21 +312,33 @@ else
     private int promptKerdesSzam = 10;
     private int promptValaszSzam = 4;
     private string promptNehezseg = "Kezdő";
+    private string promptEgyeb = ""; // Új változó az egyéb kérésekhez
     private bool masolva = false;
 
-    private string GeneralatPrompt =>
-        $"Készíts egy XML fájlt egy teszthez:\n- Téma: {(!string.IsNullOrEmpty(promptTema) ? promptTema : "[TÉMA]")}\n" +
-        $"- Nehézségi szint: {promptNehezseg}\n" +
-        $"- Kérdések: {promptKerdesSzam}\n- Válaszok: {promptValaszSzam}\n\n" +
-        $"Az AI-tól elvárt, hogy a kérdések és válaszok nyelvezete és bonyolultsága feleljen meg a(z) {promptNehezseg} szintnek.\n\n" +
-        "Struktúra:\n" +
-        "<Teszt cim=\"...\" leiras=\"...\"><Kerdesek><Kerdes szoveg=\"...\"><Valaszok>" +
-        "<Valasz helyes=\"true\">...</Valasz></Valaszok></Kerdes></Kerdesek></Teszt>";
+    private long? szerkesztettKerdesId = null;
+    private string szerkesztettKerdesSzoveg = "";
+    private long? szerkesztettValaszId = null;
+    private string szerkesztettValaszSzoveg = "";
+    private bool szerkesztettValaszHelyes = false;
 
+    private string ujValaszSzoveg = "";
+    private bool ujValaszHelyes = false;
+
+    private string beillesztettXml = "";
     private bool isImporting = false;
     private string importStatusz = "";
     private string ujTesztCime = "", ujLeiras = "";
     private string ujKerdesSzoveg = "";
+
+    private string GeneralatPrompt =>
+        $"Készíts egy XML fájlt egy teszthez:\n- Téma: {(!string.IsNullOrEmpty(promptTema) ? promptTema : "[TÉMA]")}\n" +
+        $"- Nehézségi szint: {promptNehezseg}\n" +
+        $"- Kérdések: {promptKerdesSzam}\n- Válaszok: {promptValaszSzam}\n" +
+        (!string.IsNullOrWhiteSpace(promptEgyeb) ? $"- Egyéb kérések: {promptEgyeb}\n" : "") +
+        $"\nAz AI-tól elvárt, hogy a kérdések és válaszok nyelvezete és bonyolultsága felejjen meg a(z) {promptNehezseg} szintnek.\n\n" +
+        "Struktúra:\n" +
+        "<Teszt cim=\"...\" leiras=\"...\"><Kerdesek><Kerdes szoveg=\"...\"><Valaszok>" +
+        "<Valasz helyes=\"true\">...</Valasz></Valaszok></Kerdes></Kerdesek></Teszt>";
 
     protected override async Task OnInitializedAsync() => await Betoltes();
 
@@ -276,65 +363,128 @@ else
         await Task.Delay(3000); masolva = false; StateHasChanged();
     }
 
+    private void KerdesSzerkesztesInditas(Kerdes k) { szerkesztettKerdesId = k.KerdesId; szerkesztettKerdesSzoveg = k.KerdesSzoveg ?? ""; }
+    private void KerdesSzerkesztesMegse() => szerkesztettKerdesId = null;
+    private async Task KerdesMentes(Kerdes k)
+    {
+        try
+        {
+            k.KerdesSzoveg = szerkesztettKerdesSzoveg;
+            await Db.From<Kerdes>().Update(k);
+            szerkesztettKerdesId = null;
+            await Betoltes();
+        }
+        catch (Exception ex) { hibaUzenet = "Hiba a kérdés mentésekor: " + ex.Message; }
+    }
+
+    private void ValaszSzerkesztesInditas(Valasz v) { szerkesztettValaszId = v.ValaszId; szerkesztettValaszSzoveg = v.ValaszSzoveg ?? ""; szerkesztettValaszHelyes = v.Helyes; }
+    private void ValaszSzerkesztesMegse() => szerkesztettValaszId = null;
+    private async Task ValaszMentes(Valasz v)
+    {
+        try
+        {
+            v.ValaszSzoveg = szerkesztettValaszSzoveg;
+            v.Helyes = szerkesztettValaszHelyes;
+            await Db.From<Valasz>().Update(v);
+            szerkesztettValaszId = null;
+            await Betoltes();
+        }
+        catch (Exception ex) { hibaUzenet = "Hiba a válasz mentésekor: " + ex.Message; }
+    }
+
+    private async Task ValaszHozzaadas(long kid)
+    {
+        if (string.IsNullOrWhiteSpace(ujValaszSzoveg)) return;
+        try
+        {
+            var ujV = new Valasz { KerdesId = kid, ValaszSzoveg = ujValaszSzoveg, Helyes = ujValaszHelyes };
+            await Db.From<Valasz>().Insert(ujV);
+            ujValaszSzoveg = ""; ujValaszHelyes = false;
+            await Betoltes();
+        }
+        catch (Exception ex) { hibaUzenet = "Hiba a válasz hozzáadásakor: " + ex.Message; }
+    }
+
     private async Task VeglegesTorles(long id)
     {
         try
         {
             hibaUzenet = "";
-            var kerdesIds = kerdesek?.Where(k => k.TesztId == id).Select(k => k.KerdesId).ToList();
-
-            if (kerdesIds != null && kerdesIds.Any())
+            var kIds = kerdesek?.Where(k => k.TesztId == id).Select(k => k.KerdesId).ToList();
+            if (kIds != null)
             {
-                foreach (var kId in kerdesIds)
-                {
-                    await Db.From<Valasz>().Where(v => v.KerdesId == kId).Delete();
-                }
+                foreach (var kId in kIds) await Db.From<Valasz>().Where(v => v.KerdesId == kId).Delete();
                 await Db.From<Kerdes>().Where(k => k.TesztId == id).Delete();
             }
-
             await Db.From<Teszt>().Where(x => x.TesztId == id).Delete();
-            torlesAlattId = null;
-            await Betoltes();
+            torlesAlattId = null; await Betoltes();
         }
-        catch (Exception ex)
-        {
-            hibaUzenet = "Hiba a törléskor: " + ex.Message;
-        }
+        catch (Exception ex) { hibaUzenet = "Hiba a törléskor: " + ex.Message; }
     }
 
     private async Task HandleFileSelected(InputFileChangeEventArgs e)
     {
-        hibaUzenet = ""; isImporting = true; importStatusz = "Feldolgozás...";
+        hibaUzenet = ""; isImporting = true; importStatusz = "Fájl beolvasása...";
         try
         {
             using var stream = e.File.OpenReadStream();
             var doc = await XDocument.LoadAsync(stream, LoadOptions.None, default);
-            var tesztElem = doc.Element("Teszt");
-            var ujTeszt = new Teszt
-            {
-                TesztCime = tesztElem.Attribute("cim")?.Value ?? "Importált",
-                Leiras = tesztElem.Attribute("leiras")?.Value ?? "",
-                Aktiv = true
-            };
-            var resp = await Db.From<Teszt>().Insert(ujTeszt);
-            var tid = resp.Model.TesztId;
-            foreach (var ke in tesztElem.Element("Kerdesek")?.Elements("Kerdes") ?? Enumerable.Empty<XElement>())
-            {
-                var rk = await Db.From<Kerdes>().Insert(new Kerdes { TesztId = tid, KerdesSzoveg = ke.Attribute("szoveg")?.Value });
-                foreach (var ve in ke.Element("Valaszok")?.Elements("Valasz") ?? Enumerable.Empty<XElement>())
-                {
-                    await Db.From<Valasz>().Insert(new Valasz
-                    {
-                        KerdesId = rk.Model.KerdesId,
-                        ValaszSzoveg = ve.Value,
-                        Helyes = bool.TryParse(ve.Attribute("helyes")?.Value, out var h) && h
-                    });
-                }
-            }
-            aktivTab = "lista"; await Betoltes();
+            await ImportXmlDoc(doc);
         }
-        catch (Exception ex) { hibaUzenet = "Import hiba: " + ex.Message; }
+        catch (Exception ex) { hibaUzenet = "Fájl hiba: " + ex.Message; }
         finally { isImporting = false; }
+    }
+
+    private async Task HandleTextImport()
+    {
+        if (string.IsNullOrWhiteSpace(beillesztettXml)) return;
+        hibaUzenet = ""; isImporting = true; importStatusz = "Szöveg feldolgozása...";
+        try
+        {
+            var doc = XDocument.Parse(beillesztettXml);
+            await ImportXmlDoc(doc);
+            beillesztettXml = "";
+        }
+        catch (Exception ex) { hibaUzenet = "Érvénytelen XML formátum: " + ex.Message; }
+        finally { isImporting = false; }
+    }
+
+    private async Task ImportXmlDoc(XDocument doc)
+    {
+        importStatusz = "Mentés az adatbázisba...";
+        var tesztElem = doc.Element("Teszt");
+        if (tesztElem == null) throw new Exception("Hiányzik a <Teszt> gyökérelem.");
+
+        var ujTeszt = new Teszt
+        {
+            TesztCime = tesztElem.Attribute("cim")?.Value ?? "Importált Teszt",
+            Leiras = tesztElem.Attribute("leiras")?.Value ?? "",
+            Aktiv = true
+        };
+
+        var resp = await Db.From<Teszt>().Insert(ujTeszt);
+        var tid = resp.Model.TesztId;
+
+        foreach (var ke in tesztElem.Element("Kerdesek")?.Elements("Kerdes") ?? Enumerable.Empty<XElement>())
+        {
+            var rk = await Db.From<Kerdes>().Insert(new Kerdes
+            {
+                TesztId = tid,
+                KerdesSzoveg = ke.Attribute("szoveg")?.Value ?? ke.Value
+            });
+
+            foreach (var ve in ke.Element("Valaszok")?.Elements("Valasz") ?? Enumerable.Empty<XElement>())
+            {
+                await Db.From<Valasz>().Insert(new Valasz
+                {
+                    KerdesId = rk.Model.KerdesId,
+                    ValaszSzoveg = ve.Value,
+                    Helyes = bool.TryParse(ve.Attribute("helyes")?.Value, out var h) && h
+                });
+            }
+        }
+        aktivTab = "lista";
+        await Betoltes();
     }
 
     private void ToggleKeresek(long id) { if (nyitottTesztek.Contains(id)) nyitottTesztek.Remove(id); else nyitottTesztek.Add(id); }
