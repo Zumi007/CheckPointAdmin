@@ -1,203 +1,273 @@
 ﻿@page "/"
 @using CheckPointAdmin.Models
+@using static Supabase.Postgrest.Constants
 @inject Supabase.Client Db
 
-<PageTitle>Kezdőlap - Dashboard</PageTitle>
+<PageTitle>CheckPoint Admin - Dashboard</PageTitle>
 
-<div class="row mb-4 align-items-center">
-    <div class="col">
-        <h1 class="display-5 fw-bold text-light">Dashboard</h1>
-        <p class="text-muted">Üdvözöljük a CheckPoint adminisztrációs felületén! Itt láthatja a rendszer aktuális állapotát.</p>
-    </div>
-    <div class="col-auto">
-        <span class="badge @(isOnline ? "bg-success" : "bg-danger") p-2 shadow-sm">
-            <i class="bi @(isOnline ? "bi-cloud-check" : "bi-cloud-slash") me-1"></i>
-            @(isOnline ? "Rendszer Online" : "Kapcsolódási hiba")
-        </span>
-    </div>
+<div class="container py-4">
+    @if (bejelentkezettAdmin == null)
+    {
+        <!-- 1. ADMIN BEJELENTKEZÉS -->
+        <div class="row justify-content-center mt-5">
+            <div class="col-md-5">
+                <div class="card shadow-lg border-primary border-top-0 border-start-0 border-end-0 border-4 bg-dark text-light">
+                    <div class="card-body p-5">
+                        <div class="text-center mb-4">
+                            <div class="display-1 text-primary mb-3">
+                                <i class="bi bi-shield-lock-fill"></i>
+                            </div>
+                            <h2 class="fw-bold">CheckPoint Admin</h2>
+                            <p class="text-muted small text-uppercase">Központi Irányítás</p>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small text-muted fw-bold">ADMIN FELHASZNÁLÓNÉV</label>
+                            <div class="input-group shadow-sm">
+                                <span class="input-group-text bg-dark border-secondary text-muted"><i class="bi bi-person"></i></span>
+                                <input type="text" class="form-control bg-dark text-white border-secondary shadow-none"
+                                       @bind="loginName" @onkeyup="HandleKeyUp" placeholder="Felhasználónév..." />
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label small text-muted fw-bold">JELSZÓ</label>
+                            <div class="input-group shadow-sm">
+                                <span class="input-group-text bg-dark border-secondary text-muted"><i class="bi bi-key"></i></span>
+                                <input type="password" class="form-control bg-dark text-white border-secondary shadow-none"
+                                       @bind="password" @onkeyup="HandleKeyUp" placeholder="Jelszó..." />
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary btn-lg w-100 fw-bold shadow-sm" @onclick="AdminLogin" disabled="@isBusy">
+                            @if (isBusy)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            else
+                            {
+                                <span><i class="bi bi-box-arrow-in-right me-2"></i>Belépés</span>
+                            }
+                        </button>
+
+                        @if (!string.IsNullOrEmpty(statuszUzenet))
+                        {
+                            <div class="alert alert-danger mt-4 small animate-fade border-0 bg-danger bg-opacity-10 text-danger shadow-sm">
+                                <i class="bi bi-exclamation-triangle-fill me-2"></i> @statuszUzenet
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- 2. DASHBOARD TARTALOM (Sikeres belépés után) -->
+        <div class="row mb-4 align-items-center animate-fade">
+            <div class="col">
+                <h1 class="display-5 fw-bold text-light">Vezérlőpult</h1>
+                <p class="text-muted">Szia, <span class="text-primary fw-bold">@bejelentkezettAdmin.Nev</span>! Így áll most a rendszer:</p>
+            </div>
+            <div class="col-auto d-flex gap-2">
+                <button class="btn btn-outline-info shadow-sm" @onclick="Betoltes" disabled="@isBusy">
+                    <i class="bi bi-arrow-clockwise @(isBusy ? "spinner-border-sm" : "") me-1"></i> Frissítés
+                </button>
+                <button class="btn btn-outline-danger shadow-sm" @onclick="Logout">
+                    <i class="bi bi-power me-1"></i> Kilépés
+                </button>
+            </div>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
+                <p class="mt-3 text-muted">Adatok szinkronizálása a felhővel...</p>
+            </div>
+        }
+        else
+        {
+            <div class="row g-4 mb-5 animate-fade">
+                <div class="col-md-4">
+                    <div class="card bg-dark border-secondary h-100 shadow-sm border-start border-4 border-primary">
+                        <div class="card-body d-flex align-items-center">
+                            <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3">
+                                <i class="bi bi-person-badge text-primary fs-2"></i>
+                            </div>
+                            <div>
+                                <h6 class="card-subtitle mb-1 text-muted small">Összes Tanuló</h6>
+                                <h2 class="card-title mb-0 fw-bold">@tanuloCount</h2>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-dark border-secondary h-100 shadow-sm border-start border-4 border-info">
+                        <div class="card-body d-flex align-items-center">
+                            <div class="rounded-circle bg-info bg-opacity-10 p-3 me-3">
+                                <i class="bi bi-people text-info fs-2"></i>
+                            </div>
+                            <div>
+                                <h6 class="card-subtitle mb-1 text-muted small">Csoportok</h6>
+                                <h2 class="card-title mb-0 fw-bold">@csoportCount</h2>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-dark border-secondary h-100 shadow-sm border-start border-4 border-warning">
+                        <div class="card-body d-flex align-items-center">
+                            <div class="rounded-circle bg-warning bg-opacity-10 p-3 me-3">
+                                <i class="bi bi-file-earmark-text text-warning fs-2"></i>
+                            </div>
+                            <div>
+                                <h6 class="card-subtitle mb-1 text-muted small">Elérhető Tesztek</h6>
+                                <h2 class="card-title mb-0 fw-bold">@tesztCount</h2>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4 animate-fade">
+                <div class="col-lg-8">
+                    <div class="card bg-dark border-secondary h-100 shadow-sm">
+                        <div class="card-header bg-transparent border-secondary py-3">
+                            <h5 class="card-title mb-0 text-light"><i class="bi bi-lightning-charge me-2 text-primary"></i>Gyorsműveletek</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-sm-6"><a href="tesztek" class="btn btn-outline-primary w-100 py-3 text-start"><i class="bi bi-magic me-2"></i> AI Tesztgenerálás</a></div>
+                                <div class="col-sm-6"><a href="tanulok" class="btn btn-outline-info w-100 py-3 text-start"><i class="bi bi-person-plus me-2"></i> Tanuló rögzítése</a></div>
+                                <div class="col-sm-6"><a href="csoportok" class="btn btn-outline-secondary w-100 py-3 text-start"><i class="bi bi-folder-plus me-2"></i> Csoport létrehozása</a></div>
+                                <div class="col-sm-6"><a href="eredmenyek" class="btn btn-outline-warning w-100 py-3 text-start"><i class="bi bi-graph-up me-2"></i> Eredmények elemzése</a></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card bg-dark border-secondary h-100 shadow-sm">
+                        <div class="card-header bg-transparent border-secondary py-3">
+                            <h5 class="card-title mb-0 text-light"><i class="bi bi-info-circle me-2 text-info"></i>Rendszer állapot</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3 d-flex justify-content-between">
+                                <span class="text-muted small">Utolsó frissítés</span>
+                                <span class="text-light small">@lastUpdate.ToString("HH:mm:ss")</span>
+                            </div>
+                            <div class="p-3 bg-primary bg-opacity-10 rounded border border-primary border-opacity-25 text-center">
+                                <p class="mb-0 small text-primary fw-bold">
+                                    <i class="bi bi-check-all me-1"></i> Minden rendszer üzemkész.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
 </div>
 
-@if (isLoading)
-{
-    <div class="d-flex justify-content-center my-5">
-        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
-            <span class="visually-hidden">Betöltés...</span>
-        </div>
-    </div>
-}
-else
-{
-    <!-- STATISZTIKAI KÁRTYÁK -->
-    <div class="row g-4 mb-5">
-        <!-- TANULÓK -->
-        <div class="col-md-4">
-            <div class="card bg-dark border-secondary h-100 shadow-sm dashboard-card border-start border-4 border-primary">
-                <div class="card-body d-flex align-items-center">
-                    <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3">
-                        <i class="bi bi-person-badge text-primary fs-2"></i>
-                    </div>
-                    <div>
-                        <h6 class="card-subtitle mb-1 text-muted">Összes Tanuló</h6>
-                        <h2 class="card-title mb-0 fw-bold">@tanuloCount</h2>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- CSOPORTOK -->
-        <div class="col-md-4">
-            <div class="card bg-dark border-secondary h-100 shadow-sm dashboard-card border-start border-4 border-info">
-                <div class="card-body d-flex align-items-center">
-                    <div class="rounded-circle bg-info bg-opacity-10 p-3 me-3">
-                        <i class="bi bi-people text-info fs-2"></i>
-                    </div>
-                    <div>
-                        <h6 class="card-subtitle mb-1 text-muted">Csoportok Száma</h6>
-                        <h2 class="card-title mb-0 fw-bold">@csoportCount</h2>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- TESZTEK -->
-        <div class="col-md-4">
-            <div class="card bg-dark border-secondary h-100 shadow-sm dashboard-card border-start border-4 border-warning">
-                <div class="card-body d-flex align-items-center">
-                    <div class="rounded-circle bg-warning bg-opacity-10 p-3 me-3">
-                        <i class="bi bi-file-earmark-text text-warning fs-2"></i>
-                    </div>
-                    <div>
-                        <h6 class="card-subtitle mb-1 text-muted">Elérhető Tesztek</h6>
-                        <h2 class="card-title mb-0 fw-bold">@tesztCount</h2>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- GYORSMŰVELETEK ÉS RENDSZERINFÓ -->
-    <div class="row g-4">
-        <div class="col-lg-8">
-            <div class="card bg-dark border-secondary h-100 shadow-sm">
-                <div class="card-header bg-transparent border-secondary py-3">
-                    <h5 class="card-title mb-0"><i class="bi bi-lightning-charge me-2 text-primary"></i>Gyorsműveletek</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-sm-6">
-                            <a href="tesztek" class="btn btn-outline-primary w-100 py-3 text-start">
-                                <i class="bi bi-magic me-2"></i> Új teszt generálása AI-val
-                            </a>
-                        </div>
-                        <div class="col-sm-6">
-                            <a href="tanulok" class="btn btn-outline-info w-100 py-3 text-start">
-                                <i class="bi bi-person-plus me-2"></i> Tanuló rögzítése
-                            </a>
-                        </div>
-                        <div class="col-sm-6">
-                            <a href="csoportok" class="btn btn-outline-secondary w-100 py-3 text-start">
-                                <i class="bi bi-folder-plus me-2"></i> Csoport létrehozása
-                            </a>
-                        </div>
-                        <div class="col-sm-6">
-                            <button class="btn btn-outline-light w-100 py-3 text-start" @onclick="Betoltes">
-                                <i class="bi bi-arrow-clockwise me-2"></i> Adatok frissítése
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-lg-4">
-            <div class="card bg-dark border-secondary h-100 shadow-sm">
-                <div class="card-header bg-transparent border-secondary py-3">
-                    <h5 class="card-title mb-0"><i class="bi bi-info-circle me-2 text-info"></i>Rendszerinformáció</h5>
-                </div>
-                <div class="card-body">
-                    <ul class="list-group list-group-flush bg-transparent">
-                        <li class="list-group-item bg-transparent text-light border-secondary px-0">
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted small">Adatbázis</span>
-                                <span class="badge bg-success">Kapcsolódva</span>
-                            </div>
-                        </li>
-                        <li class="list-group-item bg-transparent text-light border-secondary px-0">
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted small">Utolsó frissítés</span>
-                                <span class="small">@lastUpdate.ToString("HH:mm:ss")</span>
-                            </div>
-                        </li>
-                        <li class="list-group-item bg-transparent text-light border-secondary px-0">
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted small">Verzió</span>
-                                <span class="small">v1.0.4-beta</span>
-                            </div>
-                        </li>
-                    </ul>
-                    <div class="mt-4 p-3 bg-primary bg-opacity-10 rounded text-center">
-                        <p class="mb-0 small text-primary fw-bold">Minden rendszer megfelelően működik.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-}
-
 <style>
-    .dashboard-card {
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    .animate-fade {
+        animation: fadeIn 0.4s ease-out;
     }
 
-        .dashboard-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.3) !important;
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
         }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
 </style>
 
 @code {
-    private bool isLoading = true;
-    private bool isOnline = false;
-    private int tanuloCount = 0;
-    private int csoportCount = 0;
-    private int tesztCount = 0;
+    private Tanulo? bejelentkezettAdmin;
+    private string loginName = "", password = "", statuszUzenet = "";
+    private bool isBusy = false, isLoading = false;
+    private int tanuloCount, csoportCount, tesztCount;
     private DateTime lastUpdate = DateTime.Now;
 
-    protected override async Task OnInitializedAsync()
+    private async Task HandleKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") await AdminLogin(); }
+
+    private async Task AdminLogin()
     {
-        await Betoltes();
+        if (string.IsNullOrWhiteSpace(loginName) || string.IsNullOrWhiteSpace(password))
+        {
+            statuszUzenet = "Minden mezőt tölts ki!";
+            return;
+        }
+
+        isBusy = true;
+        statuszUzenet = "";
+        StateHasChanged();
+
+        try
+        {
+            var cleanLogin = loginName.Trim().ToLower();
+            string email = cleanLogin.Contains("@") ? cleanLogin : $"{cleanLogin}@checkpoint.local";
+
+            // 1. Lépés: Bejelentkezés a Supabase Auth-ba
+            var session = await Db.Auth.SignIn(email, password.Trim());
+
+            if (session?.User != null)
+            {
+                // 2. Lépés: Profil lekérése és ADMIN jog ellenőrzése
+                var resp = await Db.From<Tanulo>()
+                    .Filter("auth_id", Operator.Equals, session.User.Id)
+                    .Get();
+
+                var profil = resp.Models.FirstOrDefault();
+
+                // SZIGORÚ ELLENŐRZÉS: Csak ha van profil ÉS is_admin = true
+                if (profil != null && profil.IsAdmin)
+                {
+                    bejelentkezettAdmin = profil;
+                    await Betoltes();
+                }
+                else
+                {
+                    statuszUzenet = "Nincs adminisztrátori jogosultságod ehhez a felülethez!";
+                    await Db.Auth.SignOut(); // Biztonsági kijelentkezés
+                    bejelentkezettAdmin = null;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Admin Login hiba: {ex.Message}");
+            statuszUzenet = "Hibás felhasználónév vagy jelszó!";
+        }
+        finally { isBusy = false; StateHasChanged(); }
     }
 
     private async Task Betoltes()
     {
+        if (bejelentkezettAdmin == null) return;
+        isLoading = true;
+        StateHasChanged();
         try
         {
-            isLoading = true;
-            StateHasChanged();
+            var tTask = Db.From<Tanulo>().Select("Tanulo_id").Get();
+            var cTask = Db.From<Csoport>().Select("CsoportId").Get();
+            var tsTask = Db.From<Teszt>().Select("Teszt_id").Get();
 
-            // Párhuzamos lekérdezések a gyorsabb betöltés érdekében
-            var tanuloTask = Db.From<Tanulo>().Select("Tanulo_id").Get();
-            var csoportTask = Db.From<Csoport>().Select("CsoportId").Get();
-            var tesztTask = Db.From<Teszt>().Select("Teszt_id").Get();
+            await Task.WhenAll(tTask, cTask, tsTask);
 
-            await Task.WhenAll(tanuloTask, csoportTask, tesztTask);
-
-            tanuloCount = tanuloTask.Result.Models.Count;
-            csoportCount = csoportTask.Result.Models.Count;
-            tesztCount = tesztTask.Result.Models.Count;
-
-            isOnline = true;
+            tanuloCount = tTask.Result.Models.Count;
+            csoportCount = cTask.Result.Models.Count;
+            tesztCount = tsTask.Result.Models.Count;
             lastUpdate = DateTime.Now;
         }
-        catch (Exception ex)
-        {
-            isOnline = false;
-            Console.WriteLine($"Hiba a dashboard adatok betöltésekor: {ex.Message}");
-        }
-        finally
-        {
-            isLoading = false;
-            StateHasChanged();
-        }
+        catch (Exception ex) { Console.WriteLine($"Adat hiba: {ex.Message}"); }
+        finally { isLoading = false; StateHasChanged(); }
     }
+
+    private async Task Logout() { await Db.Auth.SignOut(); bejelentkezettAdmin = null; }
 }
