@@ -1,0 +1,283 @@
+﻿@page "/prog-kiosztasok"
+@using CheckPointAdmin.Models
+@inject Supabase.Client Db
+
+<PageTitle>Programozási Feladatok Kiosztása</PageTitle>
+
+<div class="row mb-4 align-items-center">
+    <div class="col">
+        <h1><i class="bi bi-terminal-plus text-primary me-2"></i>Kódolós Feladatok Kiosztása</h1>
+        <p class="text-muted">Rendeld hozzá a programozási feladatokat a csoportokhoz, és állíts be beadási határidőt.</p>
+    </div>
+</div>
+
+<!-- ÚJ KIOSZTÁS LÉTREHOZÁSA -->
+<div class="card bg-dark border-secondary mb-4 shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title text-light mb-3">Új kiosztás rögzítése</h5>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label small text-muted">Programozási Feladat</label>
+                <select class="form-select bg-dark text-light border-secondary" @bind="ujFeladatId">
+                    <option value="0">-- Válassz feladatot --</option>
+                    @if (feladatok != null)
+                    {
+                        @foreach (var f in feladatok.Where(x => x.Aktiv))
+                        {
+                            <option value="@f.FeladatId">@f.Cim</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted">Célcsoport</label>
+                <select class="form-select bg-dark text-light border-secondary" @bind="ujCsoportId">
+                    <option value="0">-- Válassz csoportot --</option>
+                    @if (csoportok != null)
+                    {
+                        @foreach (var cs in csoportok.Where(x => x.Aktiv))
+                        {
+                            <option value="@cs.CsoportId">@cs.CsoportNev</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted">Határidő (opcionális)</label>
+                <input type="datetime-local" class="form-control bg-dark text-light border-secondary" @bind="ujHatarido" />
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-success w-100 fw-bold" @onclick="KiosztasMentese" disabled="@(ujFeladatId == 0 || ujCsoportId == 0)">
+                    <i class="bi bi-plus-lg me-1"></i> Kiosztás
+                </button>
+            </div>
+        </div>
+        
+        @if (!string.IsNullOrEmpty(hibaUzenet))
+        {
+            <div class="alert alert-danger mt-3 mb-0">@hibaUzenet</div>
+        }
+    </div>
+</div>
+
+<!-- KIOSZTÁSOK LISTÁJA -->
+@if (kiosztasok == null)
+{
+    <div class="text-center my-5"><div class="spinner-border text-primary"></div></div>
+}
+else if (!kiosztasok.Any())
+{
+    <div class="alert alert-info bg-transparent border-info text-info text-center p-4">
+        Még nem történt egyetlen programozási feladat kiosztás sem.
+    </div>
+}
+else
+{
+    <div class="table-responsive rounded shadow-sm">
+        <table class="table table-dark table-striped table-hover mb-0 border-secondary">
+            <thead>
+                <tr>
+                    <th>Feladat / Létrehozva</th>
+                    <th>Csoport</th>
+                    <th>Határidő</th>
+                    <th style="width: 250px;" class="text-end">Műveletek</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var k in kiosztasok)
+                {
+                    var feladat = feladatok?.FirstOrDefault(x => x.FeladatId == k.FeladatId);
+                    var csoport = csoportok?.FirstOrDefault(x => x.CsoportId == k.CsoportId);
+
+                    <tr class="align-middle">
+                        <td>
+                            @if (szerkesztettId == k.KiosztasId)
+                            {
+                                <select class="form-select form-select-sm bg-dark text-light border-secondary" @bind="szerkesztettFeladatId">
+                                    @foreach (var f in feladatok!.Where(x => x.Aktiv || x.FeladatId == k.FeladatId))
+                                    {
+                                        <option value="@f.FeladatId">@f.Cim</option>
+                                    }
+                                </select>
+                            }
+                            else
+                            {
+                                <div class="fw-bold text-info">@(feladat?.Cim ?? "Ismeretlen feladat")</div>
+                                <small class="text-muted">Létrehozva: @k.Letrehozva.ToString("yyyy.MM.dd. HH:mm")</small>
+                            }
+                        </td>
+                        <td>
+                            @if (szerkesztettId == k.KiosztasId)
+                            {
+                                <select class="form-select form-select-sm bg-dark text-light border-secondary" @bind="szerkesztettCsoportId">
+                                    @foreach (var cs in csoportok!.Where(x => x.Aktiv || x.CsoportId == k.CsoportId))
+                                    {
+                                        <option value="@cs.CsoportId">@cs.CsoportNev</option>
+                                    }
+                                </select>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">@(csoport?.CsoportNev ?? "Ismeretlen csoport")</span>
+                            }
+                        </td>
+                        <td>
+                            @if (szerkesztettId == k.KiosztasId)
+                            {
+                                <input type="datetime-local" class="form-control form-control-sm bg-dark text-light border-secondary" @bind="szerkesztettHatarido" />
+                            }
+                            else
+                            {
+                                @if (k.Hatarido.HasValue)
+                                {
+                                    <span class="@(k.Hatarido < DateTime.Now ? "text-danger" : "text-light") small">
+                                        <i class="bi bi-calendar-event me-1"></i>@k.Hatarido.Value.ToString("yyyy.MM.dd. HH:mm")
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Nincs határidő</span>
+                                }
+                            }
+                        </td>
+                        <td class="text-end">
+                            @if (szerkesztettId == k.KiosztasId)
+                            {
+                                <button class="btn btn-sm btn-success me-1" @onclick="() => Mentes(k)">
+                                    <i class="bi bi-save me-1"></i> Mentés
+                                </button>
+                                <button class="btn btn-sm btn-outline-light" @onclick="Megse">
+                                    Mégse
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => Szerkesztes(k)" title="Szerkesztés">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm @(k.Aktiv ? "btn-outline-warning" : "btn-outline-success") me-1" @onclick="() => AllapotValtas(k)" title="@(k.Aktiv ? "Kiosztás visszavonása/szüneteltetése" : "Kiosztás aktiválása")">
+                                    <i class="bi @(k.Aktiv ? "bi-pause-fill" : "bi-play-fill")"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => Torles(k.KiosztasId)" title="Kiosztás törlése">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<ProgKiosztas>? kiosztasok;
+    private List<ProgFeladat>? feladatok;
+    private List<Csoport>? csoportok;
+
+    // Új kiosztás változók
+    private long ujFeladatId = 0;
+    private long ujCsoportId = 0;
+    private DateTime? ujHatarido;
+
+    private string hibaUzenet = "";
+
+    // Szerkesztési állapot változók
+    private long? szerkesztettId = null;
+    private long szerkesztettFeladatId;
+    private long szerkesztettCsoportId;
+    private DateTime? szerkesztettHatarido;
+
+    protected override async Task OnInitializedAsync() => await Betoltes();
+
+    private async Task Betoltes()
+    {
+        try
+        {
+            var pTask = Db.From<ProgFeladat>().Get();
+            var cTask = Db.From<Csoport>().Get();
+            var kTask = Db.From<ProgKiosztas>().Order("Letrehozva", Supabase.Postgrest.Constants.Ordering.Descending).Get();
+
+            await Task.WhenAll(pTask, cTask, kTask);
+
+            feladatok = pTask.Result.Models;
+            csoportok = cTask.Result.Models;
+            kiosztasok = kTask.Result.Models;
+        }
+        catch (Exception ex) { hibaUzenet = "Hiba az adatok szinkronizálásakor: " + ex.Message; }
+    }
+
+    private async Task KiosztasMentese()
+    {
+        try
+        {
+            var uj = new ProgKiosztas
+            {
+                FeladatId = ujFeladatId,
+                CsoportId = ujCsoportId,
+                Hatarido = ujHatarido,
+                Aktiv = true,
+                Letrehozva = DateTime.Now
+            };
+
+            await Db.From<ProgKiosztas>().Insert(uj);
+
+            // Alaphelyzet
+            ujFeladatId = 0;
+            ujCsoportId = 0;
+            ujHatarido = null;
+
+            await Betoltes();
+        }
+        catch (Exception ex) { hibaUzenet = "Hiba a mentés során: " + ex.Message; }
+    }
+
+    private void Szerkesztes(ProgKiosztas k)
+    {
+        szerkesztettId = k.KiosztasId;
+        szerkesztettFeladatId = k.FeladatId;
+        szerkesztettCsoportId = k.CsoportId;
+        szerkesztettHatarido = k.Hatarido;
+    }
+
+    private void Megse()
+    {
+        szerkesztettId = null;
+    }
+
+    private async Task Mentes(ProgKiosztas k)
+    {
+        try
+        {
+            k.FeladatId = szerkesztettFeladatId;
+            k.CsoportId = szerkesztettCsoportId;
+            k.Hatarido = szerkesztettHatarido;
+
+            await Db.From<ProgKiosztas>().Update(k);
+            szerkesztettId = null;
+            await Betoltes();
+        }
+        catch (Exception ex) { hibaUzenet = "Hiba a módosításkor: " + ex.Message; }
+    }
+
+    private async Task AllapotValtas(ProgKiosztas k)
+    {
+        try
+        {
+            k.Aktiv = !k.Aktiv;
+            await Db.From<ProgKiosztas>().Update(k);
+            await Betoltes();
+        }
+        catch (Exception ex) { hibaUzenet = "Hiba az állapot módosításakor: " + ex.Message; }
+    }
+
+    private async Task Torles(long id)
+    {
+        try
+        {
+            await Db.From<ProgKiosztas>().Where(x => x.KiosztasId == id).Delete();
+            await Betoltes();
+        }
+        catch (Exception ex) { hibaUzenet = "Hiba a törléskor: " + ex.Message; }
+    }
+}

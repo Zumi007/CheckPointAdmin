@@ -1,0 +1,379 @@
+﻿@page "/prog-ertekelesek"
+@using CheckPointAdmin.Models
+@inject Supabase.Client Db
+
+<PageTitle>Programozási Feladatok Értékelése</PageTitle>
+
+<div class="row mb-4 align-items-center">
+    <div class="col">
+        <h1><i class="bi bi-robot text-primary me-2"></i>Kódolós Feladatok Kiértékelése</h1>
+        <p class="text-muted">Tekintsd át a diákok megoldásait, ellenőrizd az AI javaslatait, és add meg a végleges értékelést.</p>
+    </div>
+</div>
+
+@if (kiosztasok == null)
+{
+    <div class="text-center my-5"><div class="spinner-border text-primary"></div></div>
+}
+else if (!kiosztasok.Any())
+{
+    <div class="alert alert-info bg-transparent border-info text-info text-center p-4">
+        Még nincs aktív programozási feladat kiosztva.
+    </div>
+}
+else
+{
+    <!-- KIOSZTÁS KIVÁLASZTÁSA -->
+    <div class="card bg-dark border-secondary mb-4 shadow-sm">
+        <div class="card-body">
+            <div class="row align-items-end">
+                <div class="col-md-6">
+                    <label class="form-label small text-muted text-uppercase fw-bold">Válassz Kiosztott Feladatot</label>
+                    <select class="form-select bg-black text-light border-secondary shadow-sm" @bind="ValasztottKiosztasId" @bind:after="FrissitDiakLista">
+                        <option value="0">-- Kérlek válassz... --</option>
+                        @foreach (var k in kiosztasViewModellek)
+                        {
+                            <option value="@k.KiosztasId">@k.Megnevezes (@(k.Hatarido.HasValue? k.Hatarido.Value.ToString("MM.dd") : "Nincs határidő"))</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-6 text-end">
+                    <button class="btn btn-outline-info" @onclick="Betoltes" title="Adatok frissítése">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Frissítés
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (ValasztottKiosztasId != 0 && diakLista != null)
+    {
+        <div class="row g-4">
+            <!-- BAL OLDAL: DIÁKOK LISTÁJA -->
+            <div class="col-xl-3 col-lg-4">
+                <div class="card bg-dark border-secondary shadow-sm h-100">
+                    <div class="card-header bg-black bg-opacity-25 border-bottom border-secondary py-3">
+                        <h6 class="mb-0 text-light"><i class="bi bi-people me-2"></i>Diákok (@diakLista.Count)</h6>
+                    </div>
+                    <div class="list-group list-group-flush rounded-bottom" style="max-height: 700px; overflow-y: auto;">
+                        @foreach (var d in diakLista)
+                        {
+                            bool isSelected = kivalasztottDiak?.Diak.TanuloId == d.Diak.TanuloId;
+                            <button class="list-group-item list-group-item-action text-start py-3 @(isSelected ? "bg-primary bg-opacity-25 border-primary" : "bg-dark text-light border-secondary")"
+                                    @onclick="() => KivalasztDiak(d)">
+                                <div class="d-flex w-100 justify-content-between align-items-center">
+                                    <span class="fw-bold @(isSelected ? "text-light" : "")">@d.Diak.Nev</span>
+                                    <span class="badge bg-@d.StatuszSzin bg-opacity-25 text-@d.StatuszSzin border border-@d.StatuszSzin shadow-sm">
+                                        @d.StatuszSzoveg
+                                    </span>
+                                </div>
+                                @if (d.Beadas != null)
+                                {
+                                    <div class="small mt-1 @(isSelected ? "text-light opacity-75" : "text-muted")">
+                                        <i class="bi bi-clock me-1"></i>@d.Beadas.Bekuldve.ToString("MM.dd. HH:mm")
+                                    </div>
+                                }
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- JOBB OLDAL: KIÉRTÉKELŐ PANEL -->
+            <div class="col-xl-9 col-lg-8">
+                @if (kivalasztottDiak == null)
+                {
+                    <div class="card bg-dark border-secondary shadow-sm h-100 d-flex align-items-center justify-content-center p-5 text-center">
+                        <i class="bi bi-arrow-left-circle display-4 text-secondary mb-3"></i>
+                        <h5 class="text-muted">Válassz egy diákot a bal oldali listából az értékelés megkezdéséhez.</h5>
+                    </div>
+                }
+                else if (kivalasztottDiak.Beadas == null)
+                {
+                    <div class="card bg-dark border-danger border-opacity-50 shadow-sm h-100 d-flex align-items-center justify-content-center p-5 text-center">
+                        <i class="bi bi-exclamation-triangle display-4 text-danger mb-3"></i>
+                        <h4 class="text-light">@kivalasztottDiak.Diak.Nev még nem küldte be a feladatot.</h4>
+                        <p class="text-muted">Amint a diák beküldi a megoldást, az itt fog megjelenni.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="row g-4 h-100">
+                        <!-- DIÁK KÓDJA -->
+                        <div class="col-md-7">
+                            <div class="card bg-dark border-secondary shadow-sm h-100">
+                                <div class="card-header bg-black bg-opacity-25 border-bottom border-secondary d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0 text-success"><i class="bi bi-code-square me-2"></i>Beküldött Forráskód</h6>
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="MasolasVagolapra" title="Másolás">
+                                        <i class="bi @(masolva ? "bi-check2" : "bi-clipboard")"></i>
+                                    </button>
+                                </div>
+                                <div class="card-body p-0">
+                                    <pre class="bg-transparent text-light p-3 font-monospace small mb-0 h-100" style="min-height: 500px; max-height: 700px; overflow-y: auto;">@kivalasztottDiak.Beadas.BekuldottKod</pre>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ÉRTÉKELŐ ŰRLAP ÉS AI JAVASLAT -->
+                        <div class="col-md-5">
+                            <div class="card bg-dark border-info shadow-sm h-100">
+                                <div class="card-header bg-info bg-opacity-10 border-bottom border-info py-3">
+                                    <h6 class="mb-0 text-info fw-bold"><i class="bi bi-robot me-2"></i>AI és Tanári Értékelés</h6>
+                                </div>
+                                <div class="card-body" style="max-height: 700px; overflow-y: auto;">
+                                    
+                                    <!-- AI Visszajelzés szekció -->
+                                    <div class="mb-4">
+                                        <label class="small text-info text-uppercase fw-bold mb-2">AI Javaslat</label>
+                                        @if (string.IsNullOrWhiteSpace(kivalasztottDiak.Beadas.AiSzoveg))
+                                        {
+                                            <div class="alert alert-secondary bg-black border-secondary text-muted small p-2">
+                                                Az AI asszisztens még nem értékelte ezt a kódot. Manuálisan is megadhatod a jegyet.
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="bg-black bg-opacity-50 p-3 rounded border border-info border-opacity-25 mb-2">
+                                                <div class="row text-center mb-2 border-bottom border-info border-opacity-25 pb-2">
+                                                    <div class="col-6 border-end border-info border-opacity-25">
+                                                        <span class="small text-muted d-block">Javasolt %</span>
+                                                        <span class="fs-5 text-light fw-bold">@(kivalasztottDiak.Beadas.AiSzazalek)%</span>
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <span class="small text-muted d-block">Javasolt Jegy</span>
+                                                        <span class="fs-5 text-light fw-bold">@kivalasztottDiak.Beadas.AiJegy</span>
+                                                    </div>
+                                                </div>
+                                                <p class="small text-info mb-0" style="white-space: pre-line;">@kivalasztottDiak.Beadas.AiSzoveg</p>
+                                            </div>
+                                            <button class="btn btn-sm btn-outline-info w-100" @onclick="AiJavaslatAtvetele">
+                                                <i class="bi bi-arrow-down-circle me-1"></i> AI százalék és jegy átvétele
+                                            </button>
+                                        }
+                                    </div>
+
+                                    <hr class="border-secondary opacity-25 my-4" />
+
+                                    <!-- Tanári (Végleges) Értékelés -->
+                                    <label class="small text-success text-uppercase fw-bold mb-3">Végleges (Tanári) Értékelés</label>
+                                    
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted">Százalék (%)</label>
+                                            <div class="input-group input-group-sm">
+                                                <input type="number" class="form-control bg-dark text-light border-secondary" min="0" max="100" @bind="formVeglegesSzazalek" />
+                                                <span class="input-group-text bg-secondary border-secondary text-light">%</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted">Érdemjegy (1-5)</label>
+                                            <input type="number" class="form-control form-control-sm bg-dark text-light border-secondary" min="1" max="5" @bind="formVeglegesJegy" />
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-4">
+                                        <label class="form-label small text-muted">Privát Tanári Megjegyzés a diáknak</label>
+                                        <textarea class="form-control form-control-sm bg-dark text-light border-secondary" rows="4"
+                                                  placeholder="Ezt a diák látni fogja a saját felületén..."
+                                                  @bind="formTanariMegjegyzes"></textarea>
+                                    </div>
+
+                                    <button class="btn btn-success w-100 fw-bold shadow-sm" @onclick="ErtekelesMentese" disabled="@isSaving">
+                                        @if (isSaving)
+                                        {
+                                            <span class="spinner-border spinner-border-sm me-2"></span>
+                                        }
+                                        <i class="bi bi-check-circle me-1"></i> Értékelés Lezárása és Mentése
+                                    </button>
+
+                                    @if (mentesSikeres)
+                                    {
+                                        <div class="text-success small text-center mt-2 animate-fade">Sikeresen lezárva!</div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private List<ProgKiosztas>? kiosztasok;
+    private List<ProgFeladat>? feladatok;
+    private List<Csoport>? csoportok;
+    private List<Tanulo>? tanulok;
+    private List<ProgBeadas>? osszesBeadas;
+
+    private class KiosztasViewModel
+    {
+        public long KiosztasId { get; set; }
+        public string Megnevezes { get; set; } = "";
+        public DateTime? Hatarido { get; set; }
+    }
+    private List<KiosztasViewModel> kiosztasViewModellek = new();
+    private long ValasztottKiosztasId = 0;
+
+    private class DiakBeadasViewModel
+    {
+        public Tanulo Diak { get; set; } = null!;
+        public ProgBeadas? Beadas { get; set; }
+        
+        public string StatuszSzoveg => Beadas == null ? "Hiányzik" :
+                                      Beadas.Statusz == "Bekuldve" ? "Értékelésre vár" :
+                                      Beadas.Statusz == "Lezarva" ? "Kijavítva" : "AI Értékelve";
+                                      
+        public string StatuszSzin => Beadas == null ? "danger" :
+                                    Beadas.Statusz == "Bekuldve" ? "warning" :
+                                    Beadas.Statusz == "Lezarva" ? "success" : "info";
+    }
+    
+    private List<DiakBeadasViewModel>? diakLista;
+    private DiakBeadasViewModel? kivalasztottDiak;
+
+    // Űrlap állapot
+    private int? formVeglegesSzazalek;
+    private int? formVeglegesJegy;
+    private string formTanariMegjegyzes = "";
+    private bool isSaving = false;
+    private bool mentesSikeres = false;
+    private bool masolva = false;
+
+    @inject IJSRuntime JSRuntime
+
+    protected override async Task OnInitializedAsync() => await Betoltes();
+
+    private async Task Betoltes()
+    {
+        try
+        {
+            var kTask = Db.From<ProgKiosztas>().Get();
+            var fTask = Db.From<ProgFeladat>().Get();
+            var cTask = Db.From<Csoport>().Get();
+            var tTask = Db.From<Tanulo>().Get();
+            var bTask = Db.From<ProgBeadas>().Get();
+
+            await Task.WhenAll(kTask, fTask, cTask, tTask, bTask);
+
+            kiosztasok = kTask.Result.Models;
+            feladatok = fTask.Result.Models;
+            csoportok = cTask.Result.Models;
+            tanulok = tTask.Result.Models;
+            osszesBeadas = bTask.Result.Models;
+
+            // Kiosztás Dropdown adatainak összeállítása
+            kiosztasViewModellek = kiosztasok.Select(k =>
+            {
+                var f = feladatok.FirstOrDefault(x => x.FeladatId == k.FeladatId);
+                var cs = csoportok.FirstOrDefault(x => x.CsoportId == k.CsoportId);
+                return new KiosztasViewModel
+                {
+                    KiosztasId = k.KiosztasId,
+                    Hatarido = k.Hatarido,
+                    Megnevezes = $"{(cs?.CsoportNev ?? "?")} - {(f?.Cim ?? "?")}"
+                };
+            }).OrderByDescending(x => x.KiosztasId).ToList();
+
+            // Ha van kiválasztott kiosztás, frissítjük a diák listát
+            if (ValasztottKiosztasId != 0) FrissitDiakLista();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Hiba a betöltéskor: " + ex.Message);
+        }
+    }
+
+    private void FrissitDiakLista()
+    {
+        kivalasztottDiak = null;
+        mentesSikeres = false;
+
+        if (ValasztottKiosztasId == 0)
+        {
+            diakLista = null;
+            return;
+        }
+
+        var aktKiosztas = kiosztasok?.FirstOrDefault(k => k.KiosztasId == ValasztottKiosztasId);
+        if (aktKiosztas == null) return;
+
+        // Csak azok a diákok, akik abban a csoportban vannak, ahova a feladatot kiosztottuk
+        var csoportDiakok = tanulok?.Where(t => t.CsoportId == aktKiosztas.CsoportId).ToList() ?? new List<Tanulo>();
+        var ehhezKiosztashozBeadasok = osszesBeadas?.Where(b => b.KiosztasId == ValasztottKiosztasId).ToList() ?? new List<ProgBeadas>();
+
+        diakLista = csoportDiakok.Select(d => new DiakBeadasViewModel
+        {
+            Diak = d,
+            Beadas = ehhezKiosztashozBeadasok.FirstOrDefault(b => b.TanuloId == d.TanuloId)
+        }).OrderBy(x => x.Diak.Nev).ToList();
+    }
+
+    private void KivalasztDiak(DiakBeadasViewModel d)
+    {
+        kivalasztottDiak = d;
+        mentesSikeres = false;
+        
+        if (d.Beadas != null)
+        {
+            // Ha már van elmentett végleges, azt mutatjuk, különben az AI javaslatot
+            formVeglegesSzazalek = d.Beadas.VeglegesSzazalek ?? d.Beadas.AiSzazalek;
+            formVeglegesJegy = d.Beadas.VeglegesJegy ?? d.Beadas.AiJegy;
+            formTanariMegjegyzes = d.Beadas.TanariMegjegyzes ?? "";
+        }
+    }
+
+    private void AiJavaslatAtvetele()
+    {
+        if (kivalasztottDiak?.Beadas != null)
+        {
+            formVeglegesSzazalek = kivalasztottDiak.Beadas.AiSzazalek;
+            formVeglegesJegy = kivalasztottDiak.Beadas.AiJegy;
+        }
+    }
+
+    private async Task ErtekelesMentese()
+    {
+        if (kivalasztottDiak?.Beadas == null) return;
+        isSaving = true;
+        mentesSikeres = false;
+
+        try
+        {
+            kivalasztottDiak.Beadas.VeglegesSzazalek = formVeglegesSzazalek;
+            kivalasztottDiak.Beadas.VeglegesJegy = formVeglegesJegy;
+            kivalasztottDiak.Beadas.TanariMegjegyzes = formTanariMegjegyzes;
+            kivalasztottDiak.Beadas.Statusz = "Lezarva"; // A 'Lezarva' státusz jelzi a diáknak, hogy a tanár véglegesítette
+
+            await Db.From<ProgBeadas>().Update(kivalasztottDiak.Beadas);
+            
+            mentesSikeres = true;
+            StateHasChanged();
+            
+            // Re-szinkronizáljuk a háttérben a listát, hogy a badge-ek frissüljenek
+            await Betoltes();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Hiba a mentés során: " + ex.Message);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task MasolasVagolapra()
+    {
+        if (!string.IsNullOrWhiteSpace(kivalasztottDiak?.Beadas?.BekuldottKod))
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", kivalasztottDiak.Beadas.BekuldottKod);
+            masolva = true;
+            StateHasChanged();
+            await Task.Delay(2000);
+            masolva = false;
+            StateHasChanged();
+        }
+    }
+}

@@ -1,0 +1,395 @@
+﻿@page "/progfeladatok"
+@using CheckPointAdmin.Models
+@using System.Xml.Linq
+@inject Supabase.Client Db
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Programozási Feladatok</PageTitle>
+
+<div class="row mb-4">
+    <div class="col">
+        <h1><i class="bi bi-code-slash text-primary me-2"></i>Kódolós Feladatok Kezelése</h1>
+        <p class="text-muted">Kezeld manuálisan a C# programozási feladatokat, vagy használd az AI Segéd generátorát.</p>
+    </div>
+</div>
+
+<!-- NAVIGÁCIÓS FÜLEK -->
+<ul class="nav nav-tabs mb-4 border-secondary">
+    <li class="nav-item">
+        <button class="nav-link @(aktivTab == "lista" ? "active bg-dark text-primary border-secondary border-bottom-0" : "text-secondary")" @onclick='() => aktivTab = "lista"'>
+            <i class="bi bi-list-task me-2"></i>Feladatok listája
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link @(aktivTab == "import" ? "active bg-dark text-primary border-secondary border-bottom-0" : "text-secondary")" @onclick='() => aktivTab = "import"'>
+            <i class="bi bi-robot me-2"></i>AI Segéd & Importálás
+        </button>
+    </li>
+</ul>
+
+@if (aktivTab == "import")
+{
+    <div class="row g-4">
+        <!-- AI PROMPT GENERÁTOR -->
+        <div class="col-lg-5">
+            <div class="card bg-dark border-primary h-100 shadow">
+                <div class="card-body">
+                    <h5 class="text-primary mb-3"><i class="bi bi-robot me-2"></i>AI Prompt Segéd (C#)</h5>
+                    <p class="small text-muted mb-4">Állítsd be a paramétereket, másold a promptot az AI-ba (ChatGPT/Claude), majd a kapott XML-t illeszd be jobb oldalt.</p>
+
+                    <div class="mb-3">
+                        <label class="form-label small">Feladat témája</label>
+                        <input type="text" class="form-control" placeholder="pl. Tömbök rendezése, LINQ szűrések..." @bind="promptTema" @bind:event="oninput" />
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small">Nehézségi szint</label>
+                            <select class="form-select" @bind="promptNehezseg">
+                                <option value="Kezdő">Kezdő</option>
+                                <option value="Középhaladó">Középhaladó</option>
+                                <option value="Haladó">Haladó</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small">Egyéb kérések (opcionális)</label>
+                        <textarea class="form-control bg-dark text-light border-secondary" rows="2"
+                                  placeholder="Pl. A kiinduló kód tartalmazzon egy üres metódust, amit a diáknak kell megírnia..."
+                                  @bind="promptEgyeb" @bind:event="oninput"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small text-info">Generált utasítás (Prompt):</label>
+                        <textarea class="form-control bg-black text-info border-info x-small" rows="6" readonly value="@GeneralatPrompt"></textarea>
+                    </div>
+
+                    <button class="btn btn-outline-primary w-100" @onclick="MasolasVagolapra">
+                        <i class="bi bi-clipboard me-2"></i>Prompt másolása
+                    </button>
+
+                    @if (masolva)
+                    {
+                        <div class="text-success small mt-2 text-center animate-fade">Másolva a vágólapra!</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- XML IMPORTÁLÁS -->
+        <div class="col-lg-7">
+            <div class="card bg-dark border-secondary h-100 shadow-sm">
+                <div class="card-body">
+                    <h5 class="text-light mb-4"><i class="bi bi-filetype-xml me-2"></i>XML Eredmény Importálása</h5>
+
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Illeszd be az AI által generált XML tartalmat ide:</label>
+                        <textarea class="form-control bg-black text-light border-secondary font-monospace small"
+                                  rows="12" @bind="beillesztettXml" placeholder="<ProgFeladat cim=... > ... </ProgFeladat>"></textarea>
+                    </div>
+
+                    <button class="btn btn-primary w-100 shadow-sm" @onclick="HandleTextImport" disabled="@(isImporting || string.IsNullOrWhiteSpace(beillesztettXml))">
+                        <i class="bi bi-clipboard-check me-2"></i>Importálás és Mentés
+                    </button>
+
+                    @if (isImporting)
+                    {
+                        <div class="text-center mt-4">
+                            <div class="spinner-border text-primary mb-2"></div>
+                            <p class="text-info small">@importStatusz</p>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(hibaUzenet))
+                    {
+                        <div class="alert alert-danger mt-4 small animate-fade shadow-sm">
+                            <i class="bi bi-exclamation-octagon me-2"></i>@hibaUzenet
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <!-- ÚJ FELADAT MANUÁLIS HOZZÁADÁSA -->
+    <div class="card bg-dark border-secondary mb-4 shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title text-light mb-3">Új feladat gyors rögzítése</h5>
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <input type="text" class="form-control" placeholder="Feladat címe" @bind="ujFeladatCime" />
+                </div>
+                <div class="col-md-7">
+                    <input type="text" class="form-control" placeholder="Rövid leírás" @bind="ujLeiras" />
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-success w-100" @onclick="FeladatHozzaadas" disabled="@string.IsNullOrWhiteSpace(ujFeladatCime)">
+                        <i class="bi bi-plus-circle me-1"></i> Létrehozás
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FELADATOK LISTÁJA -->
+    @if (feladatok == null)
+    {
+        <div class="text-center my-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else if (!feladatok.Any())
+    {
+        <div class="alert alert-info bg-transparent border-info text-info text-center p-4">Nincsenek programozási feladatok rögzítve.</div>
+    }
+    else
+    {
+        <div class="table-responsive rounded shadow-sm">
+            <table class="table table-dark table-striped table-hover mb-0 border-secondary">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;"></th>
+                        <th>Cím / Leírás</th>
+                        <th style="width: 100px;">Állapot</th>
+                        <th style="width: 250px;" class="text-end">Műveletek</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in feladatok)
+                    {
+                        bool isEditing = szerkesztettId == f.FeladatId;
+                        // Automatikusan kinyílik a kód rész is, ha szerkesztjük
+                        bool isExpanded = nyitottFeladatok.Contains(f.FeladatId) || isEditing;
+
+                        <tr class="align-middle">
+                            <td>
+                                <!-- Kinyitó/Becsukó gomb a kód megtekintéséhez -->
+                                <button class="btn btn-sm btn-outline-info" @onclick="() => ToggleSzerkeszto(f.FeladatId)">
+                                    <i class="bi @(isExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
+                                </button>
+                            </td>
+                            <td>
+                                @if (isEditing)
+                                {
+                                    <input type="text" class="form-control form-control-sm mb-1 bg-dark text-light border-info" @bind="szerkesztettCim" placeholder="Feladat címe..." />
+                                    <textarea class="form-control form-control-sm bg-dark text-light border-info" rows="3" @bind="szerkesztettLeiras" placeholder="Feladat leírása..."></textarea>
+                                }
+                                else
+                                {
+                                    <div class="fw-bold">@f.Cim</div>
+                                    <small class="text-muted d-block text-truncate" style="max-width: 500px;" title="@f.Leiras">@f.Leiras</small>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge @(f.Aktiv ? "bg-success" : "bg-danger")">@(f.Aktiv ? "Aktív" : "Inaktív")</span>
+                            </td>
+                            <td class="text-end">
+                                @if (torlesAlattId == f.FeladatId)
+                                {
+                                    <span class="text-danger small me-2">Biztosan törlöd?</span>
+                                    <button class="btn btn-sm btn-danger me-1" @onclick="() => VeglegesTorles(f.FeladatId)">Igen</button>
+                                    <button class="btn btn-sm btn-outline-light" @onclick="() => torlesAlattId = null">Nem</button>
+                                }
+                                else if (isEditing)
+                                {
+                                    <!-- Mentés / Mégse -->
+                                    <button class="btn btn-sm btn-success me-1" @onclick="() => Mentes(f)"><i class="bi bi-save"></i> Mentés</button>
+                                    <button class="btn btn-sm btn-outline-light" @onclick="Megse">Mégse</button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-sm btn-outline-primary me-1" title="Teljes feladat szerkesztése" @onclick="() => SzerkesztesInditas(f)">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm @(f.Aktiv ? "btn-outline-warning" : "btn-outline-info") me-1" @onclick="() => AllapotValtas(f)">
+                                        <i class="bi @(f.Aktiv ? "bi-eye-slash" : "bi-eye")"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => torlesAlattId = f.FeladatId" title="Törlés">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+
+                        <!-- KÓDSABLON (Megtekintés vagy Szerkesztés) -->
+                        @if (isExpanded)
+                        {
+                            <tr class="bg-black bg-opacity-25">
+                                <td colspan="4" class="p-4 border-start border-info border-4">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="text-info mb-0 fw-bold"><i class="bi bi-code-square me-2"></i>Kiinduló Kódsablon</h6>
+                                    </div>
+
+                                    @if (isEditing)
+                                    {
+                                        <textarea class="form-control bg-dark text-light border-info font-monospace small mb-2" rows="10" @bind="szerkesztettKodSablon"></textarea>
+                                        <div class="text-end">
+                                            <span class="text-muted small me-3"><i class="bi bi-info-circle"></i> A változtatások a fenti 'Mentés' gombbal rögzülnek.</span>
+                                            <button class="btn btn-sm btn-success" @onclick="() => Mentes(f)"><i class="bi bi-save"></i> Teljes feladat mentése</button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <pre class="bg-dark p-3 rounded border border-secondary border-opacity-25 text-light font-monospace small mb-0" style="max-height: 300px; overflow-y: auto;">@(string.IsNullOrWhiteSpace(f.KodSablon) ? "// Nincs megadva kódsablon.\n// A diákok egy üres fájlt fognak kapni." : f.KodSablon)</pre>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    private List<ProgFeladat>? feladatok;
+    private HashSet<long> nyitottFeladatok = new();
+    private string hibaUzenet = "";
+    private string aktivTab = "lista";
+    private long? torlesAlattId = null;
+
+    // AI Prompt Változók
+    private string promptTema = "";
+    private string promptNehezseg = "Kezdő";
+    private string promptEgyeb = "";
+    private bool masolva = false;
+
+    // Új feladat felvitele
+    private string ujFeladatCime = "";
+    private string ujLeiras = "";
+
+    // Globális Szerkesztési változók (Egyszerre szerkesztjük a címet, leírást és a kódot)
+    private long? szerkesztettId = null;
+    private string szerkesztettCim = "";
+    private string szerkesztettLeiras = "";
+    private string szerkesztettKodSablon = "";
+
+    // XML Import
+    private string beillesztettXml = "";
+    private bool isImporting = false;
+    private string importStatusz = "";
+
+    // --- AI PROMPT GENERÁLÓ ---
+    private string GeneralatPrompt =>
+        $"Készíts egy C# programozási feladatot diákok számára:\n" +
+        $"- Téma: {(!string.IsNullOrEmpty(promptTema) ? promptTema : "[TÉMA]")}\n" +
+        $"- Nehézségi szint: {promptNehezseg}\n" +
+        (!string.IsNullOrWhiteSpace(promptEgyeb) ? $"- Egyéb kérések: {promptEgyeb}\n" : "") +
+        $"\nÍrj egy rövid, érthető leírást, és készíts egy C# kódsablont (Code Template), amit a diákok megkapnak kiindulásként (pl. `class Program {{ static void Main() {{ ... }} }}`). " +
+        $"Az eredményt szigorúan az alábbi XML formátumban add vissza. A kódsablont kötelezően tedd <![CDATA[ ]]> blokkba!\n\n" +
+        "<ProgFeladat cim=\"Feladat címe\" leiras=\"Rövid leírás\">\n  <KodSablon><![CDATA[\n// Ide jön a C# kód\n  ]]></KodSablon>\n</ProgFeladat>";
+
+    protected override async Task OnInitializedAsync() => await Betoltes();
+
+    private async Task Betoltes()
+    {
+        try
+        {
+            var fResp = await Db.From<ProgFeladat>().Order("Feladat_id", Supabase.Postgrest.Constants.Ordering.Ascending).Get();
+            feladatok = fResp.Models;
+        }
+        catch (Exception ex) { Console.WriteLine(ex); }
+    }
+
+    private async Task MasolasVagolapra()
+    {
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", GeneralatPrompt);
+        masolva = true; StateHasChanged();
+        await Task.Delay(3000); masolva = false; StateHasChanged();
+    }
+
+    // --- MANUÁLIS KEZELÉS MŰVELETEI ---
+    private void ToggleSzerkeszto(long id)
+    {
+        if (nyitottFeladatok.Contains(id)) nyitottFeladatok.Remove(id);
+        else nyitottFeladatok.Add(id);
+    }
+
+    private async Task FeladatHozzaadas()
+    {
+        await Db.From<ProgFeladat>().Insert(new ProgFeladat { Cim = ujFeladatCime, Leiras = ujLeiras, KodSablon = "// Írd ide a kódot...\nusing System;\n\nclass Program\n{\n    static void Main(string[] args)\n    {\n        \n    }\n}", Aktiv = true });
+        ujFeladatCime = ""; ujLeiras = ""; await Betoltes();
+    }
+
+    private void SzerkesztesInditas(ProgFeladat f)
+    {
+        szerkesztettId = f.FeladatId;
+        szerkesztettCim = f.Cim ?? "";
+        szerkesztettLeiras = f.Leiras ?? "";
+        szerkesztettKodSablon = f.KodSablon ?? "";
+        
+        // Biztosítjuk, hogy a kód blokk kinyíljon a szerkesztéshez
+        nyitottFeladatok.Add(f.FeladatId);
+    }
+    
+    private void Megse() => szerkesztettId = null;
+
+    private async Task Mentes(ProgFeladat f)
+    {
+        f.Cim = szerkesztettCim;
+        f.Leiras = szerkesztettLeiras;
+        f.KodSablon = szerkesztettKodSablon;
+        await Db.From<ProgFeladat>().Update(f);
+        szerkesztettId = null;
+        await Betoltes();
+    }
+
+    private async Task AllapotValtas(ProgFeladat f)
+    {
+        f.Aktiv = !f.Aktiv;
+        await Db.From<ProgFeladat>().Update(f);
+        await Betoltes();
+    }
+
+    private async Task VeglegesTorles(long id)
+    {
+        try
+        {
+            await Db.From<ProgFeladat>().Where(x => x.FeladatId == id).Delete();
+            torlesAlattId = null;
+            await Betoltes();
+        }
+        catch (Exception ex) { hibaUzenet = "Hiba a törléskor: " + ex.Message; }
+    }
+
+    // --- XML IMPORTÁLÁS ---
+    private async Task HandleTextImport()
+    {
+        if (string.IsNullOrWhiteSpace(beillesztettXml)) return;
+        hibaUzenet = ""; isImporting = true; importStatusz = "Szöveg feldolgozása...";
+        
+        try
+        {
+            string tXml = beillesztettXml.Trim();
+            if (tXml.StartsWith("```xml")) tXml = tXml.Substring(6);
+            else if (tXml.StartsWith("```")) tXml = tXml.Substring(3);
+            if (tXml.EndsWith("```")) tXml = tXml.Substring(0, tXml.Length - 3);
+            tXml = tXml.Trim();
+
+            var doc = XDocument.Parse(tXml);
+            importStatusz = "Mentés az adatbázisba...";
+            
+            var feladatElem = doc.Root;
+            if (feladatElem == null || feladatElem.Name != "ProgFeladat")
+                throw new Exception("Hiányzik a <ProgFeladat> gyökérelem.");
+
+            var ujFeladat = new ProgFeladat
+            {
+                Cim = feladatElem.Attribute("cim")?.Value ?? "Importált Feladat",
+                Leiras = feladatElem.Attribute("leiras")?.Value ?? "",
+                KodSablon = feladatElem.Element("KodSablon")?.Value?.Trim() ?? "",
+                Aktiv = true
+            };
+
+            await Db.From<ProgFeladat>().Insert(ujFeladat);
+            
+            beillesztettXml = "";
+            aktivTab = "lista";
+            await Betoltes();
+        }
+        catch (Exception ex) { hibaUzenet = "Érvénytelen XML formátum vagy adatbázis hiba: " + ex.Message; }
+        finally { isImporting = false; }
+    }
+}
